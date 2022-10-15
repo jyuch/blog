@@ -7,4 +7,8 @@ menu:
   order: 2
 ---
 
-I am a person that writes stuff.
+<img src="./img/jyuch.jpg" style="border-radius:50%;height:10rem">
+
+一人称が『弊社』なだけで別に所属団体の見解ってわけじゃないからね。
+
+ごめんね

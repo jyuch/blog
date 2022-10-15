@@ -8,7 +8,7 @@ import resolveUrls from "lume/plugins/resolve_urls.ts";
 import pageFind from "lume/plugins/pagefind.ts";
 
 const site = lume({
-  location: new URL("https://example.com/"),
+  location: new URL("https://jyuch.github.io/blog/"),
 });
 
 site
