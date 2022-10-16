@@ -3,8 +3,7 @@ title: Rustでもメタプログラミングでto_stringしたい
 description: Rustでもメタプログラミングでto_stringしたい
 date: 2022-10-10
 tags: 
-  - deno
-  - lume
+  - rust
 ---
 
 # はじめに
@@ -14,7 +13,7 @@ C#やScalaでは実行時に型情報が手に入るので、その型情報を�
 
 しかし、Rustはコンパイル後はマシン語になってしまうため、手続き型マクロを使用してコンパイルプロセスの途中に介入してコードをあれこれ生成します。
 
-[https://github.com/jyuch/tostring_rs:embed:cite]
+[jyuch/tostring_rs](https://github.com/jyuch/tostring_rs)
 
 # ワークスペース構成
 今回は以下のようなワークスペース構成となっています。
