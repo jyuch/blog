@@ -8,13 +8,13 @@ import resolveUrls from "lume/plugins/resolve_urls.ts";
 import pageFind from "lume/plugins/pagefind.ts";
 
 const site = lume({
-  location: new URL("https://blog.jyuch.dev/"),
+  location: new URL("https://jyuch.github.io/blog/"),
 });
 
 site
   .ignore("README.md")
   .copy("img")
-  .copy("CNAME")
+  //.copy("CNAME")
   .use(postcss())
   .use(date())
   .use(codeHighlight())
