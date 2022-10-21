@@ -37,7 +37,7 @@ deno task serve
 ``` yaml
 - name: Build site
   run: |
-    deno task build --location=https://jyuch.github.io/blog/
+    deno task build --location=https://www.jyuch.dev/
 ```
 
 あとはGitHubにプッシュするだけでいい感じにGitHub Workflowが動いて`gh-pages`ブランチにビルド結果が展開されるので、設定からGitHubのページとして`ph-pages`を使うように設定すれば完了です。
@@ -46,7 +46,7 @@ deno task serve
 
 CMSは使わないつもりなので、デフォルトで入っているNetlify CMSは消しておきます。
 
-`_config.ts`から`.use(netlifyCMS())`の記述を消しておきます。
+また、`_config.ts`から`.use(netlifyCMS())`の記述を消しておきます。
 
 # おわりに
 
