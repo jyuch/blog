@@ -6,6 +6,7 @@ import basePath from "lume/plugins/base_path.ts";
 import slugifyUrls from "lume/plugins/slugify_urls.ts";
 import resolveUrls from "lume/plugins/resolve_urls.ts";
 import pageFind from "lume/plugins/pagefind.ts";
+import sass from "lume/plugins/sass.ts";
 
 const site = lume({
   location: new URL("https://www.jyuch.dev/"),
@@ -29,6 +30,7 @@ site
     },
   }))
   .use(slugifyUrls({ alphanumeric: false }))
-  .use(resolveUrls());
+  .use(resolveUrls())
+  .use(sass());
 
 export default site;
