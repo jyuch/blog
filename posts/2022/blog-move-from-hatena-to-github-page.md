@@ -11,7 +11,8 @@ tags:
 
 GitHub Pageからこんにちは。どうも弊社です。
 
-実は数年前から独自ドメイン`jyuch.dev`を所持しており、独自ドメインでブログをやるついでにはてなブログからGitHub Pageに移したいと考えていました。
+実は数年前から独自ドメイン`jyuch.dev`を所持しており、独自ドメインでブログをやるついでにはてなブログからGitHub
+Pageに移したいと考えていました。
 
 それとは別に最近ちょくちょく[Deno](https://deno.land/)を触っており、Denoで動く静的サイトジェネレータである[Lume](https://lume.land/)がいい感じそうだったので勢いでブログを移行してしまおうというお話です。
 
@@ -26,7 +27,7 @@ GitHub Pageからこんにちは。どうも弊社です。
 
 あとは以下のコマンドでサーバが起動するので、[http://localhost:3000](http://localhost:3000)にアクセスするとなんかいい感じのページが見えるようになると思います。
 
-``` sh
+```sh
 deno task serve
 ```
 
@@ -34,13 +35,14 @@ deno task serve
 
 `.github/workflow/build.yml`にGitHub Actionの設定があるので、以下の部分を自分の環境に合わせて書き直します。
 
-``` yaml
+```yaml
 - name: Build site
   run: |
     deno task build --location=https://www.jyuch.dev/
 ```
 
-あとはGitHubにプッシュするだけでいい感じにGitHub Workflowが動いて`gh-pages`ブランチにビルド結果が展開されるので、設定からGitHubのページとして`ph-pages`を使うように設定すれば完了です。
+あとはGitHubにプッシュするだけでいい感じにGitHub
+Workflowが動いて`gh-pages`ブランチにビルド結果が展開されるので、設定からGitHubのページとして`ph-pages`を使うように設定すれば完了です。
 
 # Netlify CMSの削除
 

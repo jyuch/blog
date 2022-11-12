@@ -7,13 +7,16 @@ tags:
 ---
 
 ## はじめに
+
 PostgreSQLは追記型アーキテクチャを採用しており、削除だけではなく更新でも参照されないタプルが発生します。
 
-高い頻度で書き込みを行うデータベースでなければ自動バキューム（Auto Vacuum）でクリーンアップされるので特段気にすることはないと思いますが、どのタイミングで動くか分からない仕組みに依存するのも少し気が引けます。
+高い頻度で書き込みを行うデータベースでなければ自動バキューム（Auto
+Vacuum）でクリーンアップされるので特段気にすることはないと思いますが、どのタイミングで動くか分からない仕組みに依存するのも少し気が引けます。
 
 というわけで、自動バキュームと自動解析の発動条件について確認してみたのでそれについてです。
 
 ## 自動バキューム
+
 Postgresの自動バキュームはレコードの`update`、`delete`の合算した回数がしきい値を超えた場合にスケジュールされます。
 
 閾値は`postgres.conf`のパラメータもしくはテーブルごとの設定値によって以下の計算式に従って計算されます。
@@ -23,6 +26,7 @@ pg_stat.reltuples * autovacuum_vacuum_scale_factor + autovacuum_vacuum_threshold
 ```
 
 ## 自動解析
+
 PostgreSQLの自動解析は`insert`、`update`、`delete`の合算した回数がしきい値を超えた場合にスケジュールされます。
 
 閾値は自動解析と同様に`postgres.conf`のパラメータもしくはテーブルごとの設定値によって以下の計算式に従って計算されます。
@@ -32,12 +36,12 @@ pg_stat.reltuples * autovacuum_analyze_scale_factor + autovacuum_analyze_thresho
 ```
 
 ## 実例
+
 というわけで実例で確認してみます。
 
-以下のクエリでテーブルごとの統計情報を確認できます。
-（閾値はデフォルトの値を使用して計算しています。）
+以下のクエリでテーブルごとの統計情報を確認できます。 （閾値はデフォルトの値を使用して計算しています。）
 
-``` sql
+```sql
 select pc.relname,                                                     -- テーブル名
        reltuples,                                                      -- 統計情報的にいるはずの行数
        n_live_tup,                                                     -- 統計情報的に生きてるはずの行数
@@ -52,18 +56,18 @@ from pg_class pc
 where pc.relname = 'table01';
 ```
 
-| relname | reltuples | n\_live\_tup | n\_dead\_tup | n\_mod\_since\_analyze | last\_autoanalyze | last\_autovacuum | auto\_analyze\_thr | auto\_vacuum\_thr |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| table01 | 6881811 | 7187811 | 0 | 306000 | 2021-11-10 16:31:50.676103 | NULL | 688231.1000000001 | 1376412.2000000002 |
+| relname | reltuples | n\_live\_tup | n\_dead\_tup | n\_mod\_since\_analyze | last\_autoanalyze          | last\_autovacuum | auto\_analyze\_thr | auto\_vacuum\_thr  |
+| :------ | :-------- | :----------- | :----------- | :--------------------- | :------------------------- | :--------------- | :----------------- | :----------------- |
+| table01 | 6881811   | 7187811      | 0            | 306000                 | 2021-11-10 16:31:50.676103 | NULL             | 688231.1000000001  | 1376412.2000000002 |
 
 また、それぞれのパラメータのデフォルト値は以下の通りです。
 
-| name | setting | description |
-| :--- | :--- | :--- |
-| autovacuum\_analyze\_scale\_factor | 0.1 | Number of tuple inserts, updates, or deletes prior to analyze as a fraction of reltuples. |
-| autovacuum\_analyze\_threshold | 50 | Minimum number of tuple inserts, updates, or deletes prior to analyze. |
-| autovacuum\_vacuum\_scale\_factor | 0.2 | Number of tuple updates or deletes prior to vacuum as a fraction of reltuples. |
-| autovacuum\_vacuum\_threshold | 50 | Minimum number of tuple updates or deletes prior to vacuum. |
+| name                               | setting | description                                                                               |
+| :--------------------------------- | :------ | :---------------------------------------------------------------------------------------- |
+| autovacuum\_analyze\_scale\_factor | 0.1     | Number of tuple inserts, updates, or deletes prior to analyze as a fraction of reltuples. |
+| autovacuum\_analyze\_threshold     | 50      | Minimum number of tuple inserts, updates, or deletes prior to analyze.                    |
+| autovacuum\_vacuum\_scale\_factor  | 0.2     | Number of tuple updates or deletes prior to vacuum as a fraction of reltuples.            |
+| autovacuum\_vacuum\_threshold      | 50      | Minimum number of tuple updates or deletes prior to vacuum.                               |
 
 これらのデフォルト値を使用した場合でも小規模なテーブルでは特に問題は起こさないと思います。
 

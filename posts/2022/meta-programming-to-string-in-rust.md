@@ -7,6 +7,7 @@ tags:
 ---
 
 # はじめに
+
 Rustでは`#[derive(Debug)]`すれば勝手に`Debug`トレイトが生えますが、まぁ一回くらいは自分で実装してみてもいいんでね？という事で実装します。
 
 C#やScalaでは実行時に型情報が手に入るので、その型情報を使用してインスタンスに対してリフレクションを介してフィールドから情報を抜きます。
@@ -16,6 +17,7 @@ C#やScalaでは実行時に型情報が手に入るので、その型情報を�
 [jyuch/tostring_rs](https://github.com/jyuch/tostring_rs)
 
 # ワークスペース構成
+
 今回は以下のようなワークスペース構成となっています。
 
 - tostring
@@ -28,15 +30,16 @@ C#やScalaでは実行時に型情報が手に入るので、その型情報を�
 
 Rustの手続きマクロを実装するクレートはCargo.tomlに以下のような記述をするのですが、そうするとコンパイル時にしか呼べなくなってしまうという制約があるらしいので、マクロの宣言と実装を分けるのがベストプラクティスっぽいです。
 
-``` toml
+```toml
 [lib]
 proc-macro = true
 ```
 
 # tostring_macro
+
 手続き型マクロを宣言します。以上です
 
-``` rust
+```rust
 #[proc_macro_derive(ToString)]
 pub fn derive(input: TokenStream) -> TokenStream {
     // マクロの実装を呼び出すだけ
@@ -46,11 +49,12 @@ pub fn derive(input: TokenStream) -> TokenStream {
 ```
 
 # tostring_macro_internals
+
 マクロを実装します。
 
 `syn`、`quote`、`proc-macro2`は手続き型マクロの三種の神器らしいのでとりあえず入れておきましょう。
 
-``` toml
+```toml
 [dependencies]
 syn = { version = "1.0", features = ["full"] }
 quote = { version = "1.0" }
@@ -61,13 +65,13 @@ proc-macro2 = { version = "1.0" }
 
 `TokenStrem`は文字通りトークン列であって、javaagentのようにASTが降ってくるわけではないので`syn::parse2`でパースするのが一番手っ取り早いです。
 
-``` rust
+```rust
 let input: DeriveInput = syn::parse2(input).unwrap();
 ```
 
 あとはフィールド定義をいい感じに取得して
 
-``` rust
+```rust
 let src_fields;
 if let syn::Data::Struct(syn::DataStruct { fields, .. }) = input.data {
     src_fields = fields;
@@ -78,14 +82,14 @@ if let syn::Data::Struct(syn::DataStruct { fields, .. }) = input.data {
 
 構造体名を取得して、
 
-``` rust
+```rust
 let src_ident = input.ident;
 let src_ident_str = src_ident.to_string();
 ```
 
 フォーマッタで出力する際のメソッド呼び出しを生成して、
 
-``` rust
+```rust
 let formatter_fn = match &src_fields {
     Fields::Named(_) => {
         quote! { debug_struct( #src_ident_str ) }
@@ -101,7 +105,7 @@ let formatter_fn = match &src_fields {
 
 各フィールドを出力するためのコードを生成して、
 
-``` rust
+```rust
 let mut formatter_field_args = vec![];
 let pattern = "{:?}";
 
@@ -120,7 +124,7 @@ for (i, field) in src_fields.iter().enumerate() {
 
 トレイト全体を生成するコードを吐き出したら完成です。
 
-``` rust
+```rust
 (quote! {
     impl ::std::fmt::Debug for #src_ident {
         fn fmt(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
@@ -134,7 +138,7 @@ for (i, field) in src_fields.iter().enumerate() {
 
 あとはアプリケーションコードの構造体に`#[derive(ToString)]`を貼り付けたら完成です。
 
-``` rust
+```rust
 #[derive(ToString)]
 pub struct Struct {
     i: i32,
@@ -150,7 +154,7 @@ pub struct Hoge(i32);
 cargo rustc -- -Z unstable-options -Z unpretty=expanded -Z macro-backtrace
 ```
 
-``` rust
+```rust
 pub struct Struct {
     i: i32,
 }
@@ -173,7 +177,9 @@ impl ::std::fmt::Debug for Hoge {
 ```
 
 # おわりに
-Rustの手続き型マクロはどちらかというとCodeDOMやIL Generatorというよりテンプレートを使用してコードを生成する方法に近いので、C#の実行時メタプログラミングに慣れている人からすると微妙にやりずらいかもしれません。
+
+Rustの手続き型マクロはどちらかというとCodeDOMやIL
+Generatorというよりテンプレートを使用してコードを生成する方法に近いので、C#の実行時メタプログラミングに慣れている人からすると微妙にやりずらいかもしれません。
 
 ただ、入力は別にRustのコードに限らなくてもいいのでアイデアと気力があればいろいろ出来そうなので夢が広がりますね。
 

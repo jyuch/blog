@@ -76,7 +76,6 @@ selecting default timezone ... Asia/Tokyo
 
 祈りながらサービスコンソールから先ほど登録したサービスを起動します
 
-
 ## 確認
 
 psqlコマンドから試しに接続してみて、問題無いか確認します。

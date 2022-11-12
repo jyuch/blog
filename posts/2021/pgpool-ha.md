@@ -43,7 +43,7 @@ pgpool_setup -s
 以下のコマンドでシステム全体が起動します。
 
 ```sh
-./startall 
+./startall
 ```
 
 起動すると（変更していなければ）Pgpool-IIは`11000`ポートで待ち受けます。

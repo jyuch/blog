@@ -16,11 +16,11 @@ tags:
 
 ここでは、以下のディレクトリにデータベースクラスタとWALアーカイブを保存します。
 
-|||
-|:-|:-|
-|データベースクラスタ（プライマリ）|/home/jyuch/pgdata/11/primary|
-|データベースクラスタ（バックアップ）|/home/jyuch/pgdata/11/standby|
-|WALアーカイブ|/home/jyuch/pgdata/11/walarch|
+|                    |                               |
+| :----------------- | :---------------------------- |
+| データベースクラスタ（プライマリ）  | /home/jyuch/pgdata/11/primary |
+| データベースクラスタ（バックアップ） | /home/jyuch/pgdata/11/standby |
+| WALアーカイブ           | /home/jyuch/pgdata/11/walarch |
 
 ## データベースクラスタの初期化
 

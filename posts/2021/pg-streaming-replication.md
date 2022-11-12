@@ -16,11 +16,11 @@ tags:
 
 ここでは、以下の諸元を使用してデータベースを構築します。
 
-|||
-|:-|:-|
-|レプリケーションユーザ|repl_user|
-|アプリケーションDB|test_app|
-|アプリケーションDBユーザ|test_app|
+|               |           |
+| :------------ | :-------- |
+| レプリケーションユーザ   | repl_user |
+| アプリケーションDB    | test_app  |
+| アプリケーションDBユーザ | test_app  |
 
 ## プライマリデータベースクラスタの初期化
 
@@ -31,8 +31,7 @@ initdb --no-locale --encoding=UTF-8 -D /home/jyuch/pgdata/11/primary
 pg_ctl -D /home/jyuch/pgdata/11/primary start
 ```
 
-プライマリクラスタにレプリケーションユーザを作成します。
-また、あわせてテストユーザとデータベースを作成します。
+プライマリクラスタにレプリケーションユーザを作成します。 また、あわせてテストユーザとデータベースを作成します。
 
 ```sh
 psql -p 5432 postgres
@@ -53,6 +52,7 @@ postgres=# CREATE DATABASE test_app OWNER test_app;
 ```sh
 psql -p 5432 -U test_app test_app
 ```
+
 ```
 psql (11.12)
 Type "help" for help.
@@ -212,8 +212,7 @@ ERROR:  cannot execute INSERT in a read-only transaction
 
 ## フェールオーバー
 
-フェールオーバーをテストするため、まずプライマリ側を停止させます。
-`-m immediate`を指定する事で疑似的にクラッシュを再現します。
+フェールオーバーをテストするため、まずプライマリ側を停止させます。 `-m immediate`を指定する事で疑似的にクラッシュを再現します。
 
 ```sh
 $ pg_ctl stop -m immediate -D /home/jyuch/pgdata/11/primary
