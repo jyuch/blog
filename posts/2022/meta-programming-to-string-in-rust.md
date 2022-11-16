@@ -16,7 +16,7 @@ C#やScalaでは実行時に型情報が手に入るので、その型情報を�
 
 [jyuch/tostring_rs](https://github.com/jyuch/tostring_rs)
 
-# ワークスペース構成
+## ワークスペース構成
 
 今回は以下のようなワークスペース構成となっています。
 
@@ -35,7 +35,7 @@ Rustの手続きマクロを実装するクレートはCargo.tomlに以下のよ
 proc-macro = true
 ```
 
-# tostring_macro
+## tostring_macro
 
 手続き型マクロを宣言します。以上です
 
@@ -48,7 +48,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
 }
 ```
 
-# tostring_macro_internals
+## tostring_macro_internals
 
 マクロを実装します。
 
@@ -176,7 +176,7 @@ impl ::std::fmt::Debug for Hoge {
 }
 ```
 
-# おわりに
+## おわりに
 
 Rustの手続き型マクロはどちらかというとCodeDOMやIL
 Generatorというよりテンプレートを使用してコードを生成する方法に近いので、C#の実行時メタプログラミングに慣れている人からすると微妙にやりずらいかもしれません。

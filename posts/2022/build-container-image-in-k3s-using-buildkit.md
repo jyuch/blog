@@ -3,7 +3,6 @@ title: k3sでもBuildKitを使用してイメージをビルドしたい
 description: k3sでもBuildKitを使用してイメージをビルドしたい
 date: 2022-11-12
 tags: 
-  - rust
   - k8s
   - k3s
 ---
