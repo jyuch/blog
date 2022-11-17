@@ -37,7 +37,7 @@ pg_ctl -D /home/jyuch/pgdata/11/primary start
 psql -p 5432 postgres
 ```
 
-```
+```sh
 postgres=# CREATE USER repl_user LOGIN REPLICATION PASSWORD 'repl_user';
 CREATE ROLE
 postgres=# CREATE USER test_app LOGIN PASSWORD 'test_app';
@@ -50,10 +50,8 @@ postgres=# CREATE DATABASE test_app OWNER test_app;
 テストデータベースに初期データを投入します。
 
 ```sh
-psql -p 5432 -U test_app test_app
-```
+$ psql -p 5432 -U test_app test_app
 
-```
 psql (11.12)
 Type "help" for help.
 
