@@ -56,10 +56,6 @@ from pg_class pc
 where pc.relname = 'table01';
 ```
 
-| relname | reltuples | n\_live\_tup | n\_dead\_tup | n\_mod\_since\_analyze | last\_autoanalyze          | last\_autovacuum | auto\_analyze\_thr | auto\_vacuum\_thr  |
-| :------ | :-------- | :----------- | :----------- | :--------------------- | :------------------------- | :--------------- | :----------------- | :----------------- |
-| table01 | 6881811   | 7187811      | 0            | 306000                 | 2021-11-10 16:31:50.676103 | NULL             | 688231.1000000001  | 1376412.2000000002 |
-
 また、それぞれのパラメータのデフォルト値は以下の通りです。
 
 | name                               | setting | description                                                                               |

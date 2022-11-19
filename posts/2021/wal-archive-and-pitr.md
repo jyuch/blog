@@ -41,7 +41,7 @@ mkdir -p /home/jyuch/pgdata/11/walarch
 
 また、確実にチェックポイント前にデータベースが吹っ飛ぶように`checkpoint_timeout`を極端な値にします。（テスト用の構成なので、本番では絶対にマネしないでね）
 
-```
+```sh
 archive_mode = on
 archive_command = 'test ! -f /home/jyuch/pgdata/11/walarch/%f && cp %p /home/jyuch/pgdata/11/walarch/%f'
 archive_timeout = 1min
@@ -111,10 +111,7 @@ restore_command = 'cp /home/jyuch/pgdata/11/walarch/%f %p'
 追加したらリカバリ側を起動させます。
 
 ```sh
-pg_ctl -D /home/jyuch/pgdata/11/standby start
-```
-
-```
+$ pg_ctl -D /home/jyuch/pgdata/11/standby start
 waiting for server to start....2021-08-12 10:23:20.654 JST [16316] LOG:  listening on IPv4 address "127.0.0.1", port 5432
 2021-08-12 10:23:20.681 JST [16316] LOG:  listening on Unix socket "/tmp/.s.PGSQL.5432"
 2021-08-12 10:23:20.734 JST [16317] LOG:  database system was interrupted; last known up at 2021-08-12 10:02:44 JST
