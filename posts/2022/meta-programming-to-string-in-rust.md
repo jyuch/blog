@@ -4,6 +4,7 @@ description: Rustでもメタプログラミングでto_stringしたい
 date: 2022-10-10
 tags: 
   - rust
+draft: true
 ---
 
 # はじめに
