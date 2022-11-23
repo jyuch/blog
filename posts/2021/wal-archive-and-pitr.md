@@ -95,7 +95,7 @@ pg_basebackup -h localhost -D /home/jyuch/pgdata/11/standby -X stream --progress
 
 新しいレコードを挿入したら、WALがローテートされるのを待ってからクラスタを南無三します。
 
-```
+```sh
 psql -c "INSERT INTO hoge VALUES ('before crash')" test; \
   sleep 70; \
   pg_ctl stop -m immediate -D /home/jyuch/pgdata/11/primary
@@ -105,7 +105,7 @@ psql -c "INSERT INTO hoge VALUES ('before crash')" test; \
 
 ベースバックアップを採ったディレクトリに`recovery.conf`を追加し、WALアーカイブからのコピーコマンドを追加します。
 
-```
+```sh
 restore_command = 'cp /home/jyuch/pgdata/11/walarch/%f %p'
 ```
 
@@ -157,7 +157,7 @@ initdb --no-locale --encoding=UTF-8 -D /home/jyuch/pgdata/11/primary
 mkdir -p /home/jyuch/pgdata/11/walarch
 ```
 
-```
+```sh
 archive_mode = on
 archive_command = 'test ! -f /home/jyuch/pgdata/11/walarch/%f && cp %p /home/jyuch/pgdata/11/walarch/%f'
 archive_timeout = 1min
@@ -222,7 +222,7 @@ done
 psql -c "SELECT * FROM foo ORDER BY i DESC" test
 ```
 
-```
+```sh
              i              |          msg           
 ----------------------------+------------------------
  2021-08-12 12:13:00.403919 | after pg_basebackup 10
@@ -253,7 +253,7 @@ pg_ctl -D /home/jyuch/pgdata/11/primary stop
 
 スクリプト中で取得したベースバックアップに、`recovery.conf`を追加し、WALアーカイブからのコピーコマンドとPITRポイントを追加します。
 
-```
+```sh
 restore_command = 'cp /home/jyuch/pgdata/11/walarch/%f %p'
 recovery_target_time  = '2021-08-12 12:08:30 JST'
 ```
@@ -264,7 +264,7 @@ recovery_target_time  = '2021-08-12 12:08:30 JST'
 pg_ctl -D /home/jyuch/pgdata/11/standby start
 ```
 
-```
+```sh
 waiting for server to start....2021-08-12 12:17:41.105 JST [19993] LOG:  listening on IPv4 address "127.0.0.1", port 5432
 2021-08-12 12:17:41.142 JST [19993] LOG:  listening on Unix socket "/tmp/.s.PGSQL.5432"
 2021-08-12 12:17:41.179 JST [19994] LOG:  database system was interrupted; last known up at 2021-08-12 12:03:58 JST
@@ -304,7 +304,7 @@ postgres=# \q
 
 リカバリが終了したと言われます。
 
-```
+```sh
 2021-08-12 12:20:58.839 JST [19994] LOG:  redo done at 0/E000080
 2021-08-12 12:20:58.839 JST [19994] LOG:  last completed transaction was at log time 2021-08-12 12:07:59.543321+09
 cp: cannot stat '/home/jyuch/pgdata/11/walarch/00000002.history': No such file or directory
@@ -320,7 +320,7 @@ cp: cannot stat '/home/jyuch/pgdata/11/walarch/00000001.history': No such file o
 psql -c "SELECT * FROM foo ORDER BY i DESC" test
 ```
 
-```
+```sh
              i              |          msg           
 ----------------------------+------------------------
  2021-08-12 12:07:59.542937 | after pg_basebackup 5
