@@ -2,6 +2,7 @@
 title: k3sでもローカルなDockerリポジトリを使用したい
 description: k3sでもローカルなDockerリポジトリを使用したい
 date: 2022-11-16
+lastModified: 2022-11-23
 tags: 
   - k8s
   - k3s

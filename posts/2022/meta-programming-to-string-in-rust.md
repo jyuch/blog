@@ -2,6 +2,7 @@
 title: Rustでもメタプログラミングでto_stringしたい
 description: Rustでもメタプログラミングでto_stringしたい
 date: 2022-10-10
+lastModified: 2022-11-23
 tags: 
   - rust
 draft: true

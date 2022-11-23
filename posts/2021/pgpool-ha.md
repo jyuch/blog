@@ -2,6 +2,7 @@
 title: Pgpool-IIを使用した高可用性構成を試してみたい
 description: Pgpool-IIを使用した高可用性構成を試してみたい
 date: 2021-11-08
+lastModified: 2022-11-23
 tags: 
   - postgres
 ---

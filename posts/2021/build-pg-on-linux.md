@@ -2,6 +2,7 @@
 title: PostgreSQLを野良ビルドしてローカルインストールしたい
 description: PostgreSQLを野良ビルドしてローカルインストールしたい
 date: 2021-11-08
+lastModified: 2022-11-23
 tags: 
   - postgres
 ---

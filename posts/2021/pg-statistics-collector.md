@@ -2,6 +2,7 @@
 title: PostgreSQLでも統計情報を確認したい
 description: PostgreSQLでも統計情報を確認したい
 date: 2021-11-08
+lastModified: 2022-11-23
 tags: 
   - postgres
 ---

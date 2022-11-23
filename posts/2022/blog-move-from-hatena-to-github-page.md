@@ -2,6 +2,7 @@
 title: ブログをはてなからGithub Pageに移したお話
 description: ブログをはてなからGithub Pageに移したお話
 date: 2022-10-15
+lastModified: 2022-11-23
 tags: 
   - deno
   - lume
