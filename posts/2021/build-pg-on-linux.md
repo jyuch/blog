@@ -11,29 +11,27 @@ tags:
 
 PostgreSQLをソースコードからビルドしてローカルインストール方法についてです。
 
+ここではLLVMのサポート、lz4・zstd圧縮のサポート、icuのサポートを有効にしてビルドします。
+
+[Chapter 17. Installation from Source Code](https://www.postgresql.org/docs/15/installation.html)
+
 ## 環境
 
 ここでは、以下の環境を使用します。
 
-割と古めなのですが、この記事のベースを書いたのがそこそこ前なのでまぁその・・・
+| ソフトウェア   | バージョン                                |
+| :------- | :----------------------------------- |
+| OS       | Ubuntu 22.04.1 LTS (Jammy Jellyfish) |
+| Postgres | 15.1                                 |
 
-| ソフトウェア   | バージョン                            |
-| :------- | :------------------------------- |
-| OS       | Ubuntu 20.04.2 LTS (Focal Fossa) |
-| Postgres | 11.12                            |
-
-また、ソースコードは`$HOME/source`に展開するものとし、バイナリは`$HOME/local/pg/11`にインストールするものとします。
-
-オプションは最低限です。いろいろ付けたかったら公式リファレンスを見ればいいと思います。
-
-[第16章 ソースコードからインストール](https://www.postgresql.jp/document/11/html/installation.html)
+また、ソースコードは`$HOME/src`に展開するものとし、バイナリは`$HOME/.local/pg15`にインストールするものとします。
 
 ## コンパイラ・ライブラリのインストール
 
 以下のコマンドより、コンパイラ環境と必要なライブラリをインストールします。
 
 ```sh
-sudo apt install build-essential libreadline-dev zlib1g-dev wget
+$ sudo apt install build-essential libreadline-dev zlib1g-dev liblz4-dev libzstd-dev llvm-14 clang-14
 ```
 
 ## ソースコードのダウンロード・展開
@@ -41,9 +39,9 @@ sudo apt install build-essential libreadline-dev zlib1g-dev wget
 以下のコマンドよりソースコードをダウロード・展開します。
 
 ```sh
-cd $HOME/source
-wget https://ftp.postgresql.org/pub/source/v11.12/postgresql-11.12.tar.gz
-tar zxf postgresql-11.12.tar.gz
+$ cd $HOME/src
+$ curl -OL https://ftp.postgresql.org/pub/source/v15.1/postgresql-15.1.tar.gz
+$ tar zxvf postgresql-15.1.tar.gz
 ```
 
 ## ビルド・インストール
@@ -51,15 +49,24 @@ tar zxf postgresql-11.12.tar.gz
 以下のコマンドより、Postgresのビルド及びインストールを行います。
 
 ```sh
-cd postgresql-11.12
-mkdir tmp_build_dir && cd tmp_build_dir
-$HOME/source/postgresql-11.12/configure --prefix=$HOME/local/pg/11
-make
-make install
+$ cd postgresql-15.1
+$ mkdir build_temp && cd build_temp
+$ $HOME/src/postgresql-15.1/configure \
+    --prefix=$HOME/.local/pg15 \
+    --with-icu \
+    --with-lz4 \
+    --with-zstd \
+    --with-llvm \
+    LLVM_CONFIG='/usr/bin/llvm-config-14' \
+    CLANG='/usr/bin/clang-14' \
+    CC='/usr/bin/clang-14' \
+    CXX='/usr/bin/clang-14'
+$ make world
+$ make install-world
 ```
 
 ## PATHの設定
 
-必要に応じて、シェルの`PATH`環境変数に`$HOME/local/pg/11/bin`を追加するといいかもです。
+必要に応じて、シェルの`PATH`環境変数に`$HOME/local/pg15/bin`を追加するといいかもです。
 
 おわり
