@@ -1,14 +1,12 @@
 ---
-layout: layouts/post.njk
 title: About Me
 templateClass: tmpl-post
-date: 2022-11-20
 menu:
   visible: true
   order: 2
 ---
 
-<img src="./img/jyuch.jpg" style="border-radius:50%;height:8rem">
+<img src="/img/jyuch.jpg" style="border-radius:50%;height:8rem">
 
 ## 概要
 
@@ -19,7 +17,7 @@ menu:
 本業はアプリケーション開発のはずですが、最近はサーバやネットワークなどのインフラ業も兼務するようになってきました。
 そのせいもあってか、最近はインフラ管理の自動化に興味があります。
 
-スキルなどは[こちら](/skills/)からどうぞ。
+スキルなどは[こちら](/about/skills/)からどうぞ。
 
 ### アウトプット
 
