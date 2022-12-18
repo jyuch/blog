@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <title>ブログをはてなからGithub Pageに移したお話 - レンコン畑でつかまえて</title>
+    
+    <meta name="description" content="ブログをはてなからGithub Pageに移したお話">
+    <link rel="stylesheet" href="/pagefind/pagefind-ui.css"><link rel="stylesheet" href="/styles.css">
+    <link rel="alternate" href="/feed.xml" type="application/atom+xml" title="レンコン畑でつかまえて">
+    <link rel="alternate" href="/feed.json" type="application/json" title="レンコン畑でつかまえて">
+  <script type="text/javascript" src="/pagefind/pagefind-ui.js"></script><script type="text/javascript">window.addEventListener('DOMContentLoaded', () => { new PagefindUI({"element":"#search","showImages":false,"showEmptyFilters":true,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"}); });</script></head>
+  <body>
+    <nav class="navbar">
+      <a href="/" class="navbar-home">
+        <strong>レンコン畑でつかまえて</strong>
+      </a>
+
+      <ul class="navbar-links">
+        <li>
+          <a href="/">
+            Home
+          </a>
+        </li>
+        <li>
+          <a href="/posts/">
+            Archive
+          </a>
+        </li>
+        <li>
+          <a href="/about/">
+            About Me
+          </a>
+        </li>
+      </ul>
+
+      <div class="navbar-search">
+        <div id="search"></div>
+      </div>
+    </nav>
+
+    <main class="body-post">
+      <article class="post" data-pagefind-body="">
+  <div class="post-header">
+    <h1 class="post-title">ブログをはてなからGithub Pageに移したお話</h1>
+
+    <nav class="post-tags">
+    
+      <a href="/tags/deno/" class="tag">deno</a>
+    
+      <a href="/tags/lume/" class="tag">lume</a>
+    
+    </nav>
+
+    <time class="post-date" datetime="2022-10-15 00:00:00">
+      October 15th, 2022
+    </time>
+  </div>
+
+  <div class="post-body">
+    <h2>はじめに</h2>
+<p>GitHub Pageからこんにちは。どうも弊社です。</p>
+<p>実は数年前から独自ドメイン<code>jyuch.dev</code>を所持しており、独自ドメインでブログをやるついでにはてなブログからGitHub
+Pageに移したいと考えていました。</p>
+<p>それとは別に最近ちょくちょく<a href="https://deno.land/">Deno</a>を触っており、Denoで動く静的サイトジェネレータである<a href="https://lume.land/">Lume</a>がいい感じそうだったので勢いでブログを移行してしまおうというお話です。</p>
+<h2>テンプレートから作成</h2>
+<p>とはいえ弊社はフロントエンド周りに詳しいわけではないので、とりあえずテンプレートをベースに作って後々いい感じに調整していきたいと思います。</p>
+<p><a href="https://github.com/lumeland/base-blog">lumeland/base-blog</a></p>
+<p>テンプレートをプルしてきたらとりあえず<code>_data/site.yml</code>をいじっていい感じにします。
+<code>title</code>がブログ名になるのでとりあえずここだけ変えておけばいいのではないでしょうか。</p>
+<p>あとは以下のコマンドでサーバが起動するので、<a href="http://localhost:3000">http://localhost:3000</a>にアクセスするとなんかいい感じのページが見えるようになると思います。</p>
+<pre><code class="language-sh hljs language-bash">deno task serve
+</code></pre>
+<h2>GitHub Action の設定</h2>
+<p><code>.github/workflow/build.yml</code>にGitHub Actionの設定があるので、以下の部分を自分の環境に合わせて書き直します。</p>
+<pre><code class="language-yaml hljs"><span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Build</span> <span class="hljs-string">site</span>
+  <span class="hljs-attr">run:</span> <span class="hljs-string">|
+    deno task build --location=https://www.jyuch.dev/
+</span></code></pre>
+<p>あとはGitHubにプッシュするだけでいい感じにGitHub
+Workflowが動いて<code>gh-pages</code>ブランチにビルド結果が展開されるので、設定からGitHubのページとして<code>ph-pages</code>を使うように設定すれば完了です。</p>
+<h2>Netlify CMSの削除</h2>
+<p>CMSは使わないつもりなので、デフォルトで入っているNetlify CMSは消しておきます。</p>
+<p>また、<code>_config.ts</code>から<code>.use(netlifyCMS())</code>の記述を消しておきます。</p>
+<h2>おわりに</h2>
+<p>フォントサイズとか調整したいところはいろいろあるのですが、いきなり100%の完成度を求めてもｱﾚですし、個人ブログなのでその辺はちょくちょく手を入れていこうと思います。</p>
+<p>おわり</p>
+
+  </div>
+</article>
+
+<hr>
+
+<nav class="post-navigation">
+  <ul>
+    <li>
+      ← Previous: <a href="/posts/2021/pg-config-on-windows/" rel="prev">WindowsでもPostgreSQLのチューニングをしたい</a>
+    </li>
+    
+    <li>
+      <strong>Next: <a href="/posts/2022/build-container-image-in-k3s-using-buildkit/" rel="next">k3sでもBuildKitを使用してイメージをビルドしたい</a> →</strong>
+    </li>
+    
+  </ul>
+</nav>
+    </main>
+
+    <footer></footer>
+
+    <!-- Current page: /posts/2022/blog-move-from-hatena-to-github-page/ -->
+  
+
+</body></html>

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <title>WindowsでもPostgreSQLのデータディレクトリを移動したい - レンコン畑でつかまえて</title>
+    
+    <meta name="description" content="WindowsでもPostgreSQLのデータディレクトリを移動したい">
+    <link rel="stylesheet" href="/pagefind/pagefind-ui.css"><link rel="stylesheet" href="/styles.css">
+    <link rel="alternate" href="/feed.xml" type="application/atom+xml" title="レンコン畑でつかまえて">
+    <link rel="alternate" href="/feed.json" type="application/json" title="レンコン畑でつかまえて">
+  <script type="text/javascript" src="/pagefind/pagefind-ui.js"></script><script type="text/javascript">window.addEventListener('DOMContentLoaded', () => { new PagefindUI({"element":"#search","showImages":false,"showEmptyFilters":true,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"}); });</script></head>
+  <body>
+    <nav class="navbar">
+      <a href="/" class="navbar-home">
+        <strong>レンコン畑でつかまえて</strong>
+      </a>
+
+      <ul class="navbar-links">
+        <li>
+          <a href="/">
+            Home
+          </a>
+        </li>
+        <li>
+          <a href="/posts/">
+            Archive
+          </a>
+        </li>
+        <li>
+          <a href="/about/">
+            About Me
+          </a>
+        </li>
+      </ul>
+
+      <div class="navbar-search">
+        <div id="search"></div>
+      </div>
+    </nav>
+
+    <main class="body-post">
+      <article class="post" data-pagefind-body="">
+  <div class="post-header">
+    <h1 class="post-title">WindowsでもPostgreSQLのデータディレクトリを移動したい</h1>
+
+    <nav class="post-tags">
+    
+      <a href="/tags/postgres/" class="tag">postgres</a>
+    
+    </nav>
+
+    <time class="post-date" datetime="2021-11-08 00:00:00">
+      November 8th, 2021
+    </time>
+  </div>
+
+  <div class="post-body">
+    <h2>はじめに</h2>
+<p>何らかの理由により、インストール済みのクラスタを再作成したい時のお話です。</p>
+<p>11で検証しましたが、まぁ他のバージョンでも同じだと思います。</p>
+<h2>サービスマネージャからPostgresサービスを停止する</h2>
+<p>停止します。</p>
+<h2>新しい場所にデータベースクラスタを再作成する</h2>
+<p>管理者で実行しているコマンドプロンプトから以下のコマンドを実行します。</p>
+<pre><code class="language-bat hljs language-dos">&gt; "C:\Program Files\PostgreSQL\<span class="hljs-number">11</span>\bin\initdb.exe" -D "C:\pgdata\<span class="hljs-number">11</span>" -U postgres --encoding=UTF8 --locale=C
+
+データベースシステム内のファイルの所有者は"JYUCH"となります。
+このユーザがサーバプロセスも所有する必要があります。
+
+データベースクラスタはロケール"C"で初期化されます。
+デフォルトのテキスト検索設定はenglishに設定されました。
+
+データベージのチェックサムは無効です。
+
+ディレクトリC:/pgdata/<span class="hljs-number">11</span>を作成します ... 完了
+サブディレクトリを作成します ... 完了
+max_connectionsのデフォルト値を選択します ... <span class="hljs-number">100</span>
+shared_buffersのデフォルト値を選択します ... <span class="hljs-number">128</span>MB
+selecting default timezone ... Asia/Tokyo
+動的共有メモリの実装を選択します ... windows
+設定ファイルを作成します ... 完了
+ブートストラップスクリプトを実行します ... 完了
+ブートストラップ後の初期化を行っています ... 完了
+データをディスクに同期します...完了
+
+警告: ローカル接続で"trust"認証を有効にします。
+この設定はpg_hba.confを編集するか、次回のinitdbの実行の際であれば-Aオプ
+ション、または、--auth-localおよび--auth-hostを使用することで変更するこ
+とができます。
+
+成功しました。以下のようにしてデータベースサーバを起動できます。
+
+    ^"C^:^\Program^ Files^\PostgreSQL^\<span class="hljs-number">11</span>^\bin^\pg^_ctl^" -D ^"C^:^\pgdata^\<span class="hljs-number">11</span>^" -l &lt;ログファイル&gt; <span class="hljs-built_in">start</span>
+</code></pre>
+<h2>以前に登録済みのサービスの登録を消す</h2>
+<p>管理者で実行しているコマンドプロンプトから以下のコマンドを実行します。</p>
+<pre><code class="language-bat hljs language-dos">"C:\Program Files\PostgreSQL\<span class="hljs-number">11</span>\bin\pg_ctl.exe" unregister -N postgresql-x64-<span class="hljs-number">11</span>
+</code></pre>
+<h2>一度Windowsを再起動する</h2>
+<p>します。</p>
+<h2>サービスを再登録する</h2>
+<p>管理者で実行しているコマンドプロンプトから以下のコマンドを実行します。</p>
+<pre><code class="language-bat hljs language-dos">"C:\Program Files\PostgreSQL\<span class="hljs-number">11</span>\bin\pg_ctl.exe" register -N postgresql-x64-<span class="hljs-number">11</span> -U "NT AUTHORITY\NetworkService" -D "C:\pgdata\<span class="hljs-number">11</span>" -w
+</code></pre>
+<h2>サービスを起動する</h2>
+<p>祈りながらサービスコンソールから先ほど登録したサービスを起動します</p>
+<h2>確認</h2>
+<p>psqlコマンドから試しに接続してみて、問題無いか確認します。</p>
+<h2>参考</h2>
+<ul>
+<li>https://lets.postgresql.jp/documents/tutorial/windows/1#pgdata</li>
+</ul>
+<p>おわり</p>
+
+  </div>
+</article>
+
+<hr>
+
+<nav class="post-navigation">
+  <ul>
+    <li>
+      ← Previous: <a href="/posts/2021/build-pg-on-linux/" rel="prev">PostgreSQLを野良ビルドしてローカルインストールしたい</a>
+    </li>
+    
+    <li>
+      <strong>Next: <a href="/posts/2021/build-pgpool-on-linux/" rel="next">Pgpool-IIを野良ビルドしてローカルインストールしたい</a> →</strong>
+    </li>
+    
+  </ul>
+</nav>
+    </main>
+
+    <footer></footer>
+
+    <!-- Current page: /posts/2021/pg-re-create-cluster-on-windows/ -->
+  
+
+</body></html>

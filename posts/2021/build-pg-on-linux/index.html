@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <title>PostgreSQLを野良ビルドしてローカルインストールしたい - レンコン畑でつかまえて</title>
+    
+    <meta name="description" content="PostgreSQLを野良ビルドしてローカルインストールしたい">
+    <link rel="stylesheet" href="/pagefind/pagefind-ui.css"><link rel="stylesheet" href="/styles.css">
+    <link rel="alternate" href="/feed.xml" type="application/atom+xml" title="レンコン畑でつかまえて">
+    <link rel="alternate" href="/feed.json" type="application/json" title="レンコン畑でつかまえて">
+  <script type="text/javascript" src="/pagefind/pagefind-ui.js"></script><script type="text/javascript">window.addEventListener('DOMContentLoaded', () => { new PagefindUI({"element":"#search","showImages":false,"showEmptyFilters":true,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"}); });</script></head>
+  <body>
+    <nav class="navbar">
+      <a href="/" class="navbar-home">
+        <strong>レンコン畑でつかまえて</strong>
+      </a>
+
+      <ul class="navbar-links">
+        <li>
+          <a href="/">
+            Home
+          </a>
+        </li>
+        <li>
+          <a href="/posts/">
+            Archive
+          </a>
+        </li>
+        <li>
+          <a href="/about/">
+            About Me
+          </a>
+        </li>
+      </ul>
+
+      <div class="navbar-search">
+        <div id="search"></div>
+      </div>
+    </nav>
+
+    <main class="body-post">
+      <article class="post" data-pagefind-body="">
+  <div class="post-header">
+    <h1 class="post-title">PostgreSQLを野良ビルドしてローカルインストールしたい</h1>
+
+    <nav class="post-tags">
+    
+      <a href="/tags/postgres/" class="tag">postgres</a>
+    
+    </nav>
+
+    <time class="post-date" datetime="2021-11-08 00:00:00">
+      November 8th, 2021
+    </time>
+  </div>
+
+  <div class="post-body">
+    <h2>はじめに</h2>
+<p>PostgreSQLをソースコードからビルドしてローカルインストール方法についてです。</p>
+<p>ここではLLVMのサポート、lz4・zstd圧縮のサポート、icuのサポートを有効にしてビルドします。</p>
+<p><a href="https://www.postgresql.org/docs/15/installation.html">Chapter 17. Installation from Source Code</a></p>
+<h2>環境</h2>
+<p>ここでは、以下の環境を使用します。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">ソフトウェア</th>
+<th style="text-align:left">バージョン</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">OS</td>
+<td style="text-align:left">Ubuntu 22.04.1 LTS (Jammy Jellyfish)</td>
+</tr>
+<tr>
+<td style="text-align:left">Postgres</td>
+<td style="text-align:left">15.1</td>
+</tr>
+</tbody>
+</table>
+<p>また、ソースコードは<code>$HOME/src</code>に展開するものとし、バイナリは<code>$HOME/.local/pg15</code>にインストールするものとします。</p>
+<h2>コンパイラ・ライブラリのインストール</h2>
+<p>以下のコマンドより、コンパイラ環境と必要なライブラリをインストールします。</p>
+<pre><code class="language-sh hljs language-bash">$ sudo apt install build-essential libreadline-dev zlib1g-dev liblz4-dev libzstd-dev llvm-14 clang-14
+</code></pre>
+<h2>ソースコードのダウンロード・展開</h2>
+<p>以下のコマンドよりソースコードをダウロード・展開します。</p>
+<pre><code class="language-sh hljs language-bash">$ <span class="hljs-built_in">cd</span> <span class="hljs-variable">$HOME</span>/src
+$ curl -OL https://ftp.postgresql.org/pub/source/v15.1/postgresql-15.1.tar.gz
+$ tar zxvf postgresql-15.1.tar.gz
+</code></pre>
+<h2>ビルド・インストール</h2>
+<p>以下のコマンドより、Postgresのビルド及びインストールを行います。</p>
+<pre><code class="language-sh hljs language-bash">$ <span class="hljs-built_in">cd</span> postgresql-15.1
+$ <span class="hljs-built_in">mkdir</span> build_temp &amp;&amp; <span class="hljs-built_in">cd</span> build_temp
+$ <span class="hljs-variable">$HOME</span>/src/postgresql-15.1/configure \
+    --prefix=<span class="hljs-variable">$HOME</span>/.local/pg15 \
+    --with-icu \
+    --with-lz4 \
+    --with-zstd \
+    --with-llvm \
+    LLVM_CONFIG=<span class="hljs-string">'/usr/bin/llvm-config-14'</span> \
+    CLANG=<span class="hljs-string">'/usr/bin/clang-14'</span> \
+    CC=<span class="hljs-string">'/usr/bin/clang-14'</span> \
+    CXX=<span class="hljs-string">'/usr/bin/clang-14'</span>
+$ make world
+$ make install-world
+</code></pre>
+<h2>PATHの設定</h2>
+<p>必要に応じて、シェルの<code>PATH</code>環境変数に<code>$HOME/local/pg15/bin</code>を追加するといいかもです。</p>
+<p>おわり</p>
+
+  </div>
+</article>
+
+<hr>
+
+<nav class="post-navigation">
+  <ul>
+    <li>
+      ← Previous: <a href="/posts/2021/wal-archive-and-pitr/" rel="prev">PostgreSQLでもWALアーカイブを使用してPITRしたい</a>
+    </li>
+    
+    <li>
+      <strong>Next: <a href="/posts/2021/pg-re-create-cluster-on-windows/" rel="next">WindowsでもPostgreSQLのデータディレクトリを移動したい</a> →</strong>
+    </li>
+    
+  </ul>
+</nav>
+    </main>
+
+    <footer></footer>
+
+    <!-- Current page: /posts/2021/build-pg-on-linux/ -->
+  
+
+</body></html>

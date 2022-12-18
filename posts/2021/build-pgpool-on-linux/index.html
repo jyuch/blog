@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <title>Pgpool-IIを野良ビルドしてローカルインストールしたい - レンコン畑でつかまえて</title>
+    
+    <meta name="description" content="Pgpool-IIを野良ビルドしてローカルインストールしたい">
+    <link rel="stylesheet" href="/pagefind/pagefind-ui.css"><link rel="stylesheet" href="/styles.css">
+    <link rel="alternate" href="/feed.xml" type="application/atom+xml" title="レンコン畑でつかまえて">
+    <link rel="alternate" href="/feed.json" type="application/json" title="レンコン畑でつかまえて">
+  <script type="text/javascript" src="/pagefind/pagefind-ui.js"></script><script type="text/javascript">window.addEventListener('DOMContentLoaded', () => { new PagefindUI({"element":"#search","showImages":false,"showEmptyFilters":true,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"}); });</script></head>
+  <body>
+    <nav class="navbar">
+      <a href="/" class="navbar-home">
+        <strong>レンコン畑でつかまえて</strong>
+      </a>
+
+      <ul class="navbar-links">
+        <li>
+          <a href="/">
+            Home
+          </a>
+        </li>
+        <li>
+          <a href="/posts/">
+            Archive
+          </a>
+        </li>
+        <li>
+          <a href="/about/">
+            About Me
+          </a>
+        </li>
+      </ul>
+
+      <div class="navbar-search">
+        <div id="search"></div>
+      </div>
+    </nav>
+
+    <main class="body-post">
+      <article class="post" data-pagefind-body="">
+  <div class="post-header">
+    <h1 class="post-title">Pgpool-IIを野良ビルドしてローカルインストールしたい</h1>
+
+    <nav class="post-tags">
+    
+      <a href="/tags/postgres/" class="tag">postgres</a>
+    
+    </nav>
+
+    <time class="post-date" datetime="2021-11-08 00:00:00">
+      November 8th, 2021
+    </time>
+  </div>
+
+  <div class="post-body">
+    <h2>はじめに</h2>
+<p>Pgpool-IIをソースコードからビルドしローカルインストールする方法についてです。</p>
+<h2>環境</h2>
+<p>ここでは、以下の環境を使用します。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">ソフトウェア</th>
+<th style="text-align:left">バージョン</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">OS</td>
+<td style="text-align:left">Ubuntu 20.04.2 LTS (Focal Fossa)</td>
+</tr>
+<tr>
+<td style="text-align:left">Postgres</td>
+<td style="text-align:left">11.12</td>
+</tr>
+<tr>
+<td style="text-align:left">Pgpool-II</td>
+<td style="text-align:left">4.2.4</td>
+</tr>
+</tbody>
+</table>
+<p>また、ソースコードは<code>$HOME/source</code>に展開するものとし、バイナリは<code>$HOME/local/pgpool</code>にインストールするものとします。</p>
+<h2>Postgresのインストール</h2>
+<p>Postgresのクライアントライブラリを使用するので、先にPostgresをビルドしてインストールします。</p>
+<h2>ソースコードのダウンロード・展開</h2>
+<p>以下のコマンドよりソースコードをダウロード・展開します。</p>
+<pre><code class="language-sh hljs language-bash"><span class="hljs-built_in">cd</span> <span class="hljs-variable">$HOME</span>/source
+wget <span class="hljs-string">"https://www.pgpool.net/mediawiki/download.php?f=pgpool-II-4.2.4.tar.gz"</span> -O pgpool-II-4.2.4.tar.gz
+tar zxf pgpool-II-4.2.4.tar.gz
+</code></pre>
+<h2>ビルド・インストール</h2>
+<p>以下のコマンドより、Pgpool-IIのビルド及びインストールを行います。</p>
+<pre><code class="language-sh hljs language-bash"><span class="hljs-built_in">cd</span> pgpool-II-4.2.4
+./configure --prefix=<span class="hljs-variable">$HOME</span>/local/pgpool --with-pgsql=<span class="hljs-variable">$HOME</span>/local/pg/11
+make
+make install
+</code></pre>
+<p>また、Pgpool-II用の拡張をPostgresのlibディレクトリにインストールする必要があるっぽいので、以下のコマンドを入力します。</p>
+<pre><code class="language-sh hljs language-bash"><span class="hljs-built_in">cd</span> src/sql/pgpool-recovery
+make
+make install
+</code></pre>
+<h2>PATHの設定</h2>
+<p>必要に応じて、シェルの<code>PATH</code>環境変数に<code>$HOME/local/pgpool/bin</code>を追加すると良いでしょう。</p>
+<p>おわり</p>
+
+  </div>
+</article>
+
+<hr>
+
+<nav class="post-navigation">
+  <ul>
+    <li>
+      ← Previous: <a href="/posts/2021/pg-re-create-cluster-on-windows/" rel="prev">WindowsでもPostgreSQLのデータディレクトリを移動したい</a>
+    </li>
+    
+    <li>
+      <strong>Next: <a href="/posts/2021/pg-statistics-collector/" rel="next">PostgreSQLでも統計情報を確認したい</a> →</strong>
+    </li>
+    
+  </ul>
+</nav>
+    </main>
+
+    <footer></footer>
+
+    <!-- Current page: /posts/2021/build-pgpool-on-linux/ -->
+  
+
+</body></html>

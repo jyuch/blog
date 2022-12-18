@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <title>k3sでもBuildKitを使用してイメージをビルドしたい - レンコン畑でつかまえて</title>
+    
+    <meta name="description" content="k3sでもBuildKitを使用してイメージをビルドしたい">
+    <link rel="stylesheet" href="/pagefind/pagefind-ui.css"><link rel="stylesheet" href="/styles.css">
+    <link rel="alternate" href="/feed.xml" type="application/atom+xml" title="レンコン畑でつかまえて">
+    <link rel="alternate" href="/feed.json" type="application/json" title="レンコン畑でつかまえて">
+  <script type="text/javascript" src="/pagefind/pagefind-ui.js"></script><script type="text/javascript">window.addEventListener('DOMContentLoaded', () => { new PagefindUI({"element":"#search","showImages":false,"showEmptyFilters":true,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"}); });</script></head>
+  <body>
+    <nav class="navbar">
+      <a href="/" class="navbar-home">
+        <strong>レンコン畑でつかまえて</strong>
+      </a>
+
+      <ul class="navbar-links">
+        <li>
+          <a href="/">
+            Home
+          </a>
+        </li>
+        <li>
+          <a href="/posts/">
+            Archive
+          </a>
+        </li>
+        <li>
+          <a href="/about/">
+            About Me
+          </a>
+        </li>
+      </ul>
+
+      <div class="navbar-search">
+        <div id="search"></div>
+      </div>
+    </nav>
+
+    <main class="body-post">
+      <article class="post" data-pagefind-body="">
+  <div class="post-header">
+    <h1 class="post-title">k3sでもBuildKitを使用してイメージをビルドしたい</h1>
+
+    <nav class="post-tags">
+    
+      <a href="/tags/k8s/" class="tag">k8s</a>
+    
+      <a href="/tags/k3s/" class="tag">k3s</a>
+    
+    </nav>
+
+    <time class="post-date" datetime="2022-11-12 00:00:00">
+      November 12th, 2022
+    </time>
+  </div>
+
+  <div class="post-body">
+    <h2>はじめに</h2>
+<p>家で運用しているサーバ機<s>をアップデートに失敗して吹き飛ばした</s>とある事情で空いたので、k3sをインストールしました。</p>
+<p>せっかく？なので、k3s上でイメージをビルドできるようにしておくとなんか捗りそうな気がするので方法を確認しておきます。</p>
+<h2>Dockerfileの準備</h2>
+<p>とりあえずサクッとRustでマルチステージビルドを行うDockerfileを用意します。</p>
+<p><a href="https://github.com/jyuch/rust-multistage-build">jyuch/rust-multistage-build</a></p>
+<pre><code class="language-dockerfile hljs"><span class="hljs-keyword">FROM</span> rust:<span class="hljs-number">1.65</span>.<span class="hljs-number">0</span>-bullseye AS builder
+
+<span class="hljs-keyword">ADD</span><span class="language-bash"> . /src</span>
+<span class="hljs-keyword">WORKDIR</span><span class="language-bash"> /src</span>
+<span class="hljs-keyword">RUN</span><span class="language-bash"> --mount=<span class="hljs-built_in">type</span>=cache,target=/usr/local/cargo/registry \
+    cargo build --release</span>
+
+<span class="hljs-keyword">FROM</span> gcr.io/distroless/cc
+
+<span class="hljs-keyword">COPY</span><span class="language-bash"> --from=builder /src/target/release/ferris_says ferris_says</span>
+<span class="hljs-keyword">CMD</span><span class="language-bash"> [<span class="hljs-string">"./ferris_says"</span>]</span>
+</code></pre>
+<p>とりあえずDockerのBuildKitでビルドできるか確認しておきます。</p>
+<pre><code class="language-sh hljs language-bash">$ docker buildx build -t ferris_says:latest .
+</code></pre>
+<p>実行するとこんな感じです。</p>
+<pre><code class="language-sh hljs language-bash">$ docker run --<span class="hljs-built_in">rm</span> -it ferris_says:latest
+ __________________________
+&lt; Hello fellow Rustaceans! &gt;
+ --------------------------
+        \
+         \
+            _~^~^~_
+        \) /  o o  \ (/
+          <span class="hljs-string">'_   -   _'</span>
+          / <span class="hljs-string">'-----'</span> \
+</code></pre>
+<h2>k3s側のビルド用のPodの用意</h2>
+<p>k3s側でビルドするのに必要なマニフェストはBuildKit側で用意してくれていたのでそれをそのまま使用します。</p>
+<p><a href="https://github.com/moby/buildkit/tree/master/examples/kubernetes">Kubernetes manifests for BuildKit</a></p>
+<p>今回はとりあえずPodで生やします。</p>
+<pre><code class="language-sh hljs language-bash">$ kubectl apply -f pod.rootless.yaml
+</code></pre>
+<pre><code class="language-sh hljs language-bash">$ kubectl get pods
+NAME        READY   STATUS    RESTARTS   AGE
+buildkitd   1/1     Running   0          124m
+</code></pre>
+<h2>BuildKitを使用してのビルド</h2>
+<p><code>buildctl</code>を使用してビルドをします。</p>
+<pre><code class="language-sh hljs language-bash">buildctl --addr kube-pod://buildkitd build \
+  --frontend dockerfile.v0 \
+  --<span class="hljs-built_in">local</span> context=. \
+  --<span class="hljs-built_in">local</span> dockerfile=. \
+  --output <span class="hljs-built_in">type</span>=oci,name=ferris_says:latest &gt; ferris_says.tar
+</code></pre>
+<p>ビルドがうまくいくとイメージがtarに詰まって出てくるので、あとはそれをk3sに突っ込むだけです。</p>
+<pre><code class="language-sh hljs language-bash">$ sudo k3s ctr images import ferris_says.tar
+</code></pre>
+<pre><code class="language-sh hljs language-bash">$ sudo k3s crictl images                                                               
+IMAGE                                        TAG                    IMAGE ID            SIZE
+docker.io/library/ferris_says                latest                 7948ed6b9ec95       10.6MB
+</code></pre>
+<p>ここまで来ればあとはイメージを動かすだけです。</p>
+<p>この時、<code>--image-pull-policy=Never</code>を指定してイメージをプルしないようにしないとイメージ取得で詰まっていい感じに動いてくれません。</p>
+<pre><code class="language-sh hljs language-bash">$ kubectl run ferris-says --restart=Never --image=docker.io/library/ferris_says:latest --<span class="hljs-built_in">rm</span> -it --image-pull-policy=Never
+ __________________________
+&lt; Hello fellow Rustaceans! &gt;
+ --------------------------
+        \
+         \
+            _~^~^~_
+        \) /  o o  \ (/
+          <span class="hljs-string">'_   -   _'</span>
+          / <span class="hljs-string">'-----'</span> \
+pod <span class="hljs-string">"ferris-says"</span> deleted
+</code></pre>
+<p>おわり</p>
+
+  </div>
+</article>
+
+<hr>
+
+<nav class="post-navigation">
+  <ul>
+    <li>
+      ← Previous: <a href="/posts/2022/blog-move-from-hatena-to-github-page/" rel="prev">ブログをはてなからGithub Pageに移したお話</a>
+    </li>
+    
+    <li>
+      <strong>Next: <a href="/posts/2022/use-mirror-repository-in-k3s/" rel="next">k3sでもローカルなDockerリポジトリを使用したい</a> →</strong>
+    </li>
+    
+  </ul>
+</nav>
+    </main>
+
+    <footer></footer>
+
+    <!-- Current page: /posts/2022/build-container-image-in-k3s-using-buildkit/ -->
+  
+
+</body></html>
