@@ -12,13 +12,17 @@
   display: inline;
 }
 .post-body {
-  font-size: 1.2em;
+  font-size: 1.1em;
   line-height: 1.4;
 
   & p,
   & ul,
   & ol {
     max-width: 45em;
+  }
+
+  & code {
+    max-width: 50em;
   }
 
   & h2,
