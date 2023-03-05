@@ -24,6 +24,7 @@ site
   .use(pageFind({
     binary: {
       extended: true,
+      version: "v0.12.0",
     },
     ui: {
       resetStyles: false,
