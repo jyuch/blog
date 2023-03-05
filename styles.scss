@@ -1,6 +1,9 @@
 /* Code syntax highlight */
 @import "https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.0.0/build/styles/github-dark.min.css";
 
+/* Web font */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300&display=swap');
+
 @import "css/reset.scss";
 @import "css/navbar.scss";
 @import "css/search.scss";
