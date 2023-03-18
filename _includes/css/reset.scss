@@ -5,6 +5,7 @@
   --blue: #135;
   --white: #fff;
   --font-family: -apple-system, system-ui, sans-serif;
+  --noto-sans-font-family: 'Noto Sans JP', sans-serif, -apple-system, system-ui;
 }
 
 html,
@@ -31,6 +32,7 @@ body {
 
 main {
   padding: 5vh 5vw;
+  font-family: var(--noto-sans-font-family);
 
   & > :first-child {
     margin-top: 0;

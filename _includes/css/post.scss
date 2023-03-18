@@ -4,7 +4,6 @@
 }
 
 .post-title {
-  font-family: 'Noto Sans JP', sans-serif;
   font-size: 2.0rem;
   font-size: clamp(1.5rem, 10vw, 2.0rem);
   line-height: 1.2;
@@ -14,7 +13,6 @@
   display: inline;
 }
 .post-body {
-  font-family: 'Noto Sans JP', sans-serif;
   font-size: 1.1em;
   line-height: 1.6;
 
@@ -43,9 +41,5 @@
 
   & li {
     padding: 1em;
-  }
-
-  & a {
-    font-family: 'Noto Sans JP', sans-serif;
   }
 }
