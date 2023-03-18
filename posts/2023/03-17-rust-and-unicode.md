@@ -56,7 +56,7 @@ JIS X 0208規格票で素振りを1000回やってから出直してきてくだ
 
 たとえば、「は（U+306F）」+「゜（U+309A）」で表現される「ぱ」は容赦なく2文字としてカウントされるわけです。
 
-``` rust
+```rust
 let a = vec!['は', '\u{309A}'];
 let a: String = a.iter().collect();
 println!("{} {} {}", a, a.len(), a.chars().count());
@@ -75,12 +75,12 @@ println!("{} {} {}", a, a.len(), a.chars().count());
 が、Rustの標準ライブラリに入ってません。
 [unicode-normalization](https://github.com/unicode-rs/unicode-normalization)を使うしかなさそうです。
 
-``` toml
+```toml
 [dependencies]
 unicode-normalization = "0.1"
 ```
 
-``` rust
+```rust
 fn test(value: &Vec<char>) {
     let str: String = value.iter().collect();
     println!("{} {} {}", str, str.len(), str.chars().count());
@@ -155,7 +155,7 @@ test(&a);
 
 これならみんな大好きIVSも正しくカウントできます。
 
-``` rust
+```rust
 let a = vec!['\u{8FBB}', '\u{E0100}'];
 test(&a);
 ```

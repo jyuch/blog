@@ -231,55 +231,55 @@ Postgresはインストール直後の設定ではメモリをあまり消費し
 今回想定するハードウェアは以下の通りとなります。
 また、今回のワークロードは読み取りが主体かつ、複雑なクエリを実行する事が予想されるためDWH寄りの傾向を想定しています。
 
-| 項目       | 値                                       |
-| :------- | :-------------------------------------- |
-| OS       | Windows 10 2004（19041.264）              |
-| Postgres | EDB社製ディストリビューション バージョン11.12             |
-| CPU      | Intel(R) Core(TM) i3-6100U CPU @ 2.30GB |
-| メモリ      | 8.0GB                                   |
-| ストレージ    | SSD 128GB                               |
-| ワークロード傾向 | DWH                                     |
+| 項目             | 値                                            |
+| :--------------- | :-------------------------------------------- |
+| OS               | Windows 10 2004（19041.264）                  |
+| Postgres         | EDB社製ディストリビューション バージョン11.12 |
+| CPU              | Intel(R) Core(TM) i3-6100U CPU @ 2.30GB       |
+| メモリ           | 8.0GB                                         |
+| ストレージ       | SSD 128GB                                     |
+| ワークロード傾向 | DWH                                           |
 
 ### チューニングパラメータ一覧
 
 今回は以下のチューニングを行っています。
 
-| 項目                               | 値             | 備考                                           |
-| :------------------------------- | :------------ | :------------------------------------------- |
-| listen_addresses                 | *             |                                              |
-| port                             | 5432          |                                              |
-| password_encryption              | scram-sha-256 |                                              |
-| shared_buffers                   | 2GB           | 物理メモリの1/4。                                   |
-| work_mem                         | 31MB          |                                              |
-| maintenance_work_mem             | 768MB         | ワークロードがDWH寄りなので多めにする。                        |
-| max_worker_processes             | 2             | 2コアなので。                                      |
-| max_parallel_maintenance_workers | 1             |                                              |
-| max_parallel_workers_per_gather  | 1             |                                              |
-| max_parallel_workers             | 2             |                                              |
-| wal_buffers                      | 16MB          | <code>shared_buffers</code>を増やしているので合わせて増やす。 |
-| max_wal_size                     | 6GB           | ワークロードがDWH寄りなので多めにする。                        |
-| min_wal_size                     | 2GB           |                                              |
-| checkpoint_completion_target     | 0.9           |                                              |
-| random_page_cost                 | 1.1           | SSDなので。                                      |
-| effective_cache_size             | 4GB           |                                              |
-| default_statistics_target        | 500           | DWHなので、アナライズに時間を掛けてもトータルのクエリコストがペイ出来るため増やす。  |
+| 項目                             | 値            | 備考                                                                                |
+| :------------------------------- | :------------ | :---------------------------------------------------------------------------------- |
+| listen_addresses                 | *             |                                                                                     |
+| port                             | 5432          |                                                                                     |
+| password_encryption              | scram-sha-256 |                                                                                     |
+| shared_buffers                   | 2GB           | 物理メモリの1/4。                                                                   |
+| work_mem                         | 31MB          |                                                                                     |
+| maintenance_work_mem             | 768MB         | ワークロードがDWH寄りなので多めにする。                                             |
+| max_worker_processes             | 2             | 2コアなので。                                                                       |
+| max_parallel_maintenance_workers | 1             |                                                                                     |
+| max_parallel_workers_per_gather  | 1             |                                                                                     |
+| max_parallel_workers             | 2             |                                                                                     |
+| wal_buffers                      | 16MB          | <code>shared_buffers</code>を増やしているので合わせて増やす。                       |
+| max_wal_size                     | 6GB           | ワークロードがDWH寄りなので多めにする。                                             |
+| min_wal_size                     | 2GB           |                                                                                     |
+| checkpoint_completion_target     | 0.9           |                                                                                     |
+| random_page_cost                 | 1.1           | SSDなので。                                                                         |
+| effective_cache_size             | 4GB           |                                                                                     |
+| default_statistics_target        | 500           | DWHなので、アナライズに時間を掛けてもトータルのクエリコストがペイ出来るため増やす。 |
 
 ### ベンチマーク
 
 ワークロードはDWH寄りなので、それに応じたベンチマーク規格としてTPC-Hを実施します。
 
-| 条件       | 値  |
-| :------- | :- |
+| 条件             | 値 |
+| :--------------- | :- |
 | スケールファクタ | 1  |
-| 同時接続数    | 1  |
+| 同時接続数       | 1  |
 
 また、ベンチマークツールとしてHammerDBのバージョン4.2を使用しています。
 
 条件を変えてテストした訳ではないため厳密性には欠けますが、デフォルト値とチューニング済みでは以下の差異が見られました。
 
-|          |                    |
-| :------- | :----------------- |
-| デフォルト設定  | 2.1秒/クエリ（各クエリの平均値） |
+|                  |                                  |
+| :--------------- | :------------------------------- |
+| デフォルト設定   | 2.1秒/クエリ（各クエリの平均値） |
 | チューニング済み | 1.1秒/クエリ（各クエリの平均値） |
 
 おわり
