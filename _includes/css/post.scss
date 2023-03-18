@@ -1,13 +1,14 @@
-.post-header {
-  padding: 5vh 0;
+.post {
+  margin: 0 auto;
+  max-width: 50em;
 }
+
 .post-title {
   font-family: 'Noto Sans JP', sans-serif;
   font-size: 2.0rem;
   font-size: clamp(1.5rem, 10vw, 2.0rem);
   line-height: 1.2;
   letter-spacing: -0.02em;
-  margin: 0 0 0.25em;
 }
 .post-tags {
   display: inline;
@@ -17,14 +18,7 @@
   font-size: 1.1em;
   line-height: 1.6;
 
-  & p,
-  & ul,
-  & ol {
-    max-width: 45em;
-  }
-
   & code {
-    max-width: 50em;
     border: solid 1px #e4e4e4;
     border-radius: 3px;
     background: #fafafa;
@@ -35,7 +29,6 @@
   & h4,
   & h5,
   & h6 {
-    max-width: 20em;
     margin-bottom: 0;
   }
 }
