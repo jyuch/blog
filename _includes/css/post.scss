@@ -29,6 +29,21 @@
   & h6 {
     margin-bottom: 0;
   }
+
+  & table {
+    border-collapse: collapse;
+
+    & th {
+      background: #fafafa;
+      font-weight: normal;
+    }
+
+    & th, td {
+      border: solid 1px #e4e4e4;
+      border-spacing: 0;
+      padding: 0.25em 0.5em;
+    }
+  }
 }
 .post-navigation {
   & ul {
