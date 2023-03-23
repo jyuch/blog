@@ -23,7 +23,7 @@ site
   .use(basePath())
   .use(pageFind({
     binary: {
-      extended: true
+      extended: true,
     },
     ui: {
       resetStyles: false,
