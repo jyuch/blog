@@ -31,11 +31,27 @@ body {
 }
 
 main {
-  padding: 5vh 5vw;
+  padding-top: 0;
+  padding-bottom: 1vh;
+  padding-left: 5vw;
+  padding-right: 5vw;
   font-family: var(--noto-sans-font-family);
 
   & > :first-child {
     margin-top: 0;
+  }
+}
+
+footer {
+  padding-top: 0;
+  padding-bottom: 5vh;
+  padding-left: 5vw;
+  padding-right: 5vw;
+
+  svg {
+    color: #a5a5a5;
+    fill: currentColor;
+    float: right;
   }
 }
 
