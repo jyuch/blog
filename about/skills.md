@@ -48,7 +48,7 @@ WinFormやWFP、ASP Coreを使用したWeb APIなど一通りの開発経験が�
 関数型言語の勉強として個人的に勉強していました。
 
 また、[GitBucket](https://github.com/gitbucket/gitbucket)向けのバックアッププラグインのメンテナンスを行っています。
-それ以外にも、Akka Alpakkaのコネクタを作ったりもしていました。
+それ以外にも、Alpakka のコネクタを作ったりもしていました。
 
 なんだかんだ言って一番OSSのコントリビューションの多い言語です。
 
