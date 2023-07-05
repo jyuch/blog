@@ -13,7 +13,9 @@ templateClass: tmpl-post
 
 WinFormやWFP、ASP Coreを使用したWeb APIなど一通りの開発経験があります。
 
-ソースコードや式木・ILなど複数の領域でのメタプログラミングを得意としており、それらを組み合わせたプログラムの自動生成を得意としています。
+[Entity Framework Core を使用した経験](https://jyuch.hatenablog.com/entry/2022/10/02/162005)やパーサコンビネータライブラリを使用した独自フォーマットの解析などの経験もあります。
+
+その中でも特にソースコードや式木・ILなど複数の領域でのメタプログラミングを得意としており、それらを組み合わせたプログラムの自動生成を得意としています。
 
 また、ソースコードを紛失したプログラムを`ildasm`→`ilasm`して無理やりpdbを生成し、WinDbgを駆使して強引にデバッグするなど活動は多岐に渡ります。
 
@@ -21,9 +23,9 @@ WinFormやWFP、ASP Coreを使用したWeb APIなど一通りの開発経験が�
 
 仕事でメインに使用している言語その2です。
 
-Spring Framework を使用したWeb APIやWebアプリケーションの実装を行っています。
+開発としては Spring Framework を使用したWeb APIやWebアプリケーションの実装を行っています。
 
-要件に応じたガベージコレクタモードの選定やパラメータのチューニング、Java Flight Recorderを使用してクラスローダに係るMetaspaceリークのトラブルシュートの経験があります。
+プラットフォームとしてのJVMでは要件に応じたガベージコレクタモードの選定やパラメータのチューニング、Java Flight Recorderを使用してクラスローダに係るMetaspaceリークのトラブルシュートの経験があります。
 
 一応 Oracle Certified Java Programmer, Gold SE 7 を持っています。
 
@@ -32,6 +34,8 @@ Spring Framework を使用したWeb APIやWebアプリケーションの実装�
 現在、個人的に最も興味を持って勉強している言語です。
 
 簡単なコンソールアプリケーションの実装に使用したり、windows-rsを使用したWin32 APIとの相互運用について勉強しています。
+
+他の言語の良いところをバランスよくまとめた文法や、C#やJavaと異なりコンパクトなシングルバイナリで動作するところがかなり気に入っています。
 
 #### TypeScript / Deno
 
@@ -44,8 +48,12 @@ Spring Framework を使用したWeb APIやWebアプリケーションの実装�
 関数型言語の勉強として個人的に勉強していました。
 
 また、[GitBucket](https://github.com/gitbucket/gitbucket)向けのバックアッププラグインのメンテナンスを行っています。
+それ以外にも、Akka Alpakkaのコネクタを作ったりもしていました。
+
+なんだかんだ言って一番OSSのコントリビューションの多い言語です。
 
 - [jyuch/gitbucket-backup-plugin](https://github.com/jyuch/gitbucket-backup-plugin)
+- [maven central repository dev.jyuch](https://central.sonatype.com/namespace/dev.jyuch)
 
 ### データベース
 
@@ -61,7 +69,7 @@ Spring Framework を使用したWeb APIやWebアプリケーションの実装�
 
 #### Oracle
 
-きらいです
+・・・。
 
 ### ミドルウェア
 
