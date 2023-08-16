@@ -28,4 +28,4 @@ menu:
 
 ご連絡は contact [at] jyuch.dev までよろしくお願いします。
 
-Google Domainでエイリアスを貼っているだけなので、返信は違うメールアドレスから行います。
+CloudflareのEmail Routingでエイリアスを貼っているだけなので、返信は違うメールアドレスから行います。
