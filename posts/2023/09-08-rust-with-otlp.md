@@ -127,7 +127,7 @@ pub(crate) fn init_tracing(service: &'static str, version: &'static str) -> Otel
 
 # アプリケーションコード
 
-起動時にOpenTelemetryの初期化さえしてしまえば、あとは普通にtracingに使うだけです。
+起動時にOpenTelemetryの初期化さえしてしまえば、あとは普通にtracingを使うだけです。
 
 メソッドに`#[instrument]`を貼れば自動的にSpanを作ってコンテキスを埋め込んでくれるので便利です。
 
