@@ -48,6 +48,10 @@
       padding: 0.25em 0.5em;
     }
   }
+
+  & img {
+    max-width: 100%;
+  }
 }
 .post-navigation {
   & ul {
