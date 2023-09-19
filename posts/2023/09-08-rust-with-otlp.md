@@ -129,7 +129,7 @@ pub(crate) fn init_tracing(service: &'static str, version: &'static str) -> Otel
 
 起動時にOpenTelemetryの初期化さえしてしまえば、あとは普通にtracingを使うだけです。
 
-メソッドに`#[instrument]`を貼れば自動的にSpanを作ってコンテキスを埋め込んでくれるので便利です。
+メソッドに`#[instrument]`を貼れば自動的にSpanを作ってコンテキストを埋め込んでくれるので便利です。
 
 ```rust
 mod otl;
