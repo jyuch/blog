@@ -22,9 +22,6 @@ site
   .use(codeHighlight())
   .use(basePath())
   .use(pageFind({
-    binary: {
-      extended: true,
-    },
     ui: {
       resetStyles: false,
     },
