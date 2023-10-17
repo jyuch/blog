@@ -1,6 +1,6 @@
 ---
 title: PostgreSQLでもストリーミングレプリケーションを試してみたい
-description: PostgreSQLでもストリーミングレプリケーションを試してみたい
+description: Postgres標準機能であるストリーミングレプリケーションを用いて、複数のクラスタ間でデータを同期出来る事を確認します
 date: 2021-11-08
 lastModified: 2022-11-23
 tags: 

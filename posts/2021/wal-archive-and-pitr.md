@@ -1,6 +1,6 @@
 ---
 title: PostgreSQLでもWALアーカイブを使用してPITRしたい
-description: PostgreSQLでもWALアーカイブを使用してPITRしたい
+description: ベースバックアップとWALアーカイブを組み合わせ、クラッシュ直前の状態までクラスタを復旧させる方法を確認します
 date: 2021-11-08
 lastModified: 2022-11-23
 tags: 

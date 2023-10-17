@@ -1,6 +1,6 @@
 ---
 title: PostgreSQLの自動バキューム・自動解析の発動条件を確認したい
-description: PostgreSQLの自動バキューム・自動解析の発動条件を確認したい
+description: PostgreSQLの自動バキューム・自動解析の発動条件を解説しています
 date: 2021-11-01
 lastModified: 2022-11-23
 tags: 

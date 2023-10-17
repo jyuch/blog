@@ -1,6 +1,6 @@
 ---
 title: Pgpool-IIを野良ビルドしてローカルインストールしたい
-description: Pgpool-IIを野良ビルドしてローカルインストールしたい
+description: LinuxにおいてPgpool-IIのビルドおよびインストールする方法を解説しています
 date: 2021-11-08
 lastModified: 2022-11-23
 tags: 

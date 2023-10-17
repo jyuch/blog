@@ -1,6 +1,6 @@
 ---
 title: PostgreSQLを野良ビルドしてローカルインストールしたい
-description: PostgreSQLを野良ビルドしてローカルインストールしたい
+description: LinuxにおいてPostgreSQLのビルドおよびインストールする方法を解説しています
 date: 2021-11-08
 lastModified: 2022-11-23
 tags: 

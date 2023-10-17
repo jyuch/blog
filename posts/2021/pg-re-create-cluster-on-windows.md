@@ -1,6 +1,6 @@
 ---
 title: WindowsでもPostgreSQLのデータディレクトリを移動したい
-description: WindowsでもPostgreSQLのデータディレクトリを移動したい
+description: Windowsにおいてインストール後のPostgreSQLのデータディレクトリに移動方法を解説しています
 date: 2021-11-08
 lastModified: 2022-11-23
 tags: 

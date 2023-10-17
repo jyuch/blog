@@ -1,6 +1,6 @@
 ---
 title: Pgpool-IIを使用した高可用性構成を試してみたい
-description: Pgpool-IIを使用した高可用性構成を試してみたい
+description: Pgpool-IIを使用して複数のクラスタを制御し、プライマリへの自動昇格が行えるかを確認します
 date: 2021-11-08
 lastModified: 2022-11-23
 tags: 
