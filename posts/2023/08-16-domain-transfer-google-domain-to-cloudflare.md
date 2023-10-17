@@ -1,6 +1,6 @@
 ---
 title: ドメインをGoogle DomainからCloudflareに移管したお話
-description: ドメインをGoogle DomainからCloudflareに移管したお話
+description: ドメインをGoogle DomainからCloudflareに移管したお知らせです
 date: 2023-08-16
 lastModified: 2023-08-16
 tags: 
