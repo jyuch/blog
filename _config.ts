@@ -31,7 +31,7 @@ site
   .use(resolveUrls())
   .use(sass());
 
-if(!site.options.dev) {
+if (!site.options.dev) {
   site.use(minifyHTML());
 }
 
