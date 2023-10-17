@@ -1,6 +1,6 @@
 ---
 title: k3sでもローカルなDockerリポジトリを使用したい
-description: k3sでもローカルなDockerリポジトリを使用したい
+description: k3sからSonatype Nexusを使用したローカルのコンテナリポジトリにアクセスする方法を確認します
 date: 2022-11-16
 lastModified: 2022-11-23
 tags: 

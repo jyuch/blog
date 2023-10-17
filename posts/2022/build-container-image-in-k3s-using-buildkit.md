@@ -1,6 +1,6 @@
 ---
 title: k3sでもBuildKitを使用してイメージをビルドしたい
-description: k3sでもBuildKitを使用してイメージをビルドしたい
+description: k3s上でBuildKitを使用してコンテナイメージをビルドする方法を確認します
 date: 2022-11-12
 lastModified: 2022-11-23
 tags: 

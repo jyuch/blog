@@ -1,6 +1,6 @@
 ---
 title: ブログをはてなからGithub Pageに移したお話
-description: ブログをはてなからGithub Pageに移したお話
+description: ブログをはてなブログからDenoおよびLumeを使用した静的サイトジェネレータに移行します
 date: 2022-10-15
 lastModified: 2022-11-23
 tags: 

@@ -1,6 +1,6 @@
 ---
 title: Rustでもメタプログラミングでto_stringしたい
-description: Rustでもメタプログラミングでto_stringしたい
+description: Rustでマクロを使用してコンパイル時に::std::fmt::Debugを自動で実装させる方法を確認します
 date: 2022-10-10
 lastModified: 2022-11-23
 tags: 
