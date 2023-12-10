@@ -3,11 +3,9 @@ title: Skills
 templateClass: tmpl-post
 ---
 
-## 技術領域
+## 開発
 
-### 開発
-
-#### C#
+### C#
 
 仕事でメインに使用している言語その1です。
 
@@ -19,7 +17,7 @@ WinFormやWFP、ASP Coreを使用したWeb APIなど一通りの開発経験が�
 
 また、ソースコードを紛失したプログラムを`ildasm`→`ilasm`して無理やりpdbを生成し、WinDbgを駆使して強引にデバッグするなど活動は多岐に渡ります。
 
-#### Java
+### Java
 
 仕事でメインに使用している言語その2です。
 
@@ -29,21 +27,27 @@ WinFormやWFP、ASP Coreを使用したWeb APIなど一通りの開発経験が�
 
 一応 Oracle Certified Java Programmer, Gold SE 7 を持っています。
 
-#### Rust
+### Python
+
+仕事でメインに使用している言語その3です。
+
+社内での情報分析やプロトタイプの実装に使用しています。
+
+### Rust
 
 現在、個人的に最も興味を持って勉強している言語です。
 
-簡単なコンソールアプリケーションの実装に使用したり、windows-rsを使用したWin32 APIとの相互運用について勉強しています。
+社内で運用しているタスクスケジューリングソフトウェアや死活監視ソフトウェアの実装に使用しています。
 
 他の言語の良いところをバランスよくまとめた文法や、C#やJavaと異なりコンパクトなシングルバイナリで動作するところがかなり気に入っています。
 
-#### TypeScript / Deno
+### TypeScript / Deno
 
 フロントエンド周りが弱いため、その領域の知識を身に着けるために個人的に勉強しています。
 
 このサイトもDeno + Lumeを使用して構築しています。
 
-#### Scala
+### Scala
 
 関数型言語の勉強として個人的に勉強していました。
 
@@ -55,68 +59,70 @@ WinFormやWFP、ASP Coreを使用したWeb APIなど一通りの開発経験が�
 - [jyuch/gitbucket-backup-plugin](https://github.com/jyuch/gitbucket-backup-plugin)
 - [maven central repository dev.jyuch](https://central.sonatype.com/namespace/dev.jyuch)
 
-### データベース
+## データベース
 
-#### PostgreSQL
+### PostgreSQL
 
 業務及びプライベートで最も使用しているデータベースです。
 
 パフォーマンスチューニングを行ったり、プランナの実行計画を確認し、適切なインデックスが使用されるようSQLのチューニングやインデックスの作成を行っています。
 
-#### SQL Server
+### SQL Server
 
 前職でメインに使用していたデータベースです。サーバのセットアップ及びアプリケーション開発の経験があります。
 
-#### Oracle
+また、現在ではデータ分析基盤として運用を担当しています。
+
+### Oracle
 
 ・・・。
 
-### ミドルウェア
+## ミドルウェア
 
-#### Tomcat
+### Tomcat
 
 Spring Frameworkで実装したアプリケーションのホスト用に運用しています。
 
-#### nginx
+### nginx
 
 リバースプロキシとして、静的ファイルのキャッシングによる配信の最適化の構成に使用しています。
 
-### 仮想化・コンテナ
+## 仮想化・コンテナ
 
-#### Docker
+### Docker
 
 アプリケーションのビルドやk3sへのデプロイ用に使用しています。
 
 また、社内のGitLabサーバで自動ビルドを回すのにも使用しています。
 
-#### Kubernetes
+### Kubernetes
 
 検証用に自宅にk3sクラスタを運用しています。
 
 宅内で運用しているアプリケーションのホストに使用しています。
 
-### OS
+## OS
 
-#### Windows Server
+### Windows Server
 
 Windows Server上にTomcat及びPostgreSQLを構成し、社内向けのサービスを展開しています。
 
 また、趣味でActive Directoryを構成したり証明書認証局を構築したりしています。
 
-#### Linux
+### Linux
 
 開発及び検証環境として主にUbuntuを使用しています。
 
-#### FreeBSD
+### FreeBSD
 
 自宅のファイルサーバとして、FreeBSDをベースとしたアプライアンスであるXigmaNASを使用してファイルサーバを[構築・運用](https://jyuch.hatenablog.com/entry/2022/01/30/175006)しています。
 
-### ネットワーク
+## ネットワーク
 
 分離されたネットワークを構築するためにヤマハのRTXシリーズを使用したNAT及びパケットフィルタの設計と構築を行っています。
 
 また、自宅ネットワークとして、アライドテレシスのx510とMikroTikを使用した10Gbpsネットワークを[構築・運用](https://jyuch.hatenablog.com/entry/2022/07/23/211721)しています。
 
-### Git
+## Git
 
 日常の開発に使用するのはもちろん、メンバーへのGitの使用方法の啓蒙やブランチ運用計画の策定、トラブル発生時のリポジトリの修復などを行っています。
