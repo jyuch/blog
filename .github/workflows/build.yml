@@ -22,7 +22,7 @@ jobs:
           deno task build --location=https://www.jyuch.dev/
 
       - name: Deploy
-        uses: crazy-max/ghaction-github-pages@v2.0.1
+        uses: crazy-max/ghaction-github-pages@v4
         with:
           build_dir: _site
         env:
