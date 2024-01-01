@@ -8,6 +8,7 @@ import resolveUrls from "lume/plugins/resolve_urls.ts";
 import pageFind from "lume/plugins/pagefind.ts";
 import sass from "lume/plugins/sass.ts";
 import minifyHTML from "lume/plugins/minify_html.ts";
+import nunjucks from "lume/plugins/nunjucks.ts";
 
 const site = lume({
   location: new URL("https://www.jyuch.dev/"),
@@ -27,12 +28,10 @@ site
       resetStyles: false,
     },
   }))
-  .use(slugifyUrls({ alphanumeric: false }))
+  .use(slugifyUrls({ alphanumeric: false, lowercase: false }))
   .use(resolveUrls())
-  .use(sass());
-
-if (!site.options.dev) {
-  site.use(minifyHTML());
-}
+  .use(sass())
+  .use(nunjucks())
+  .use(minifyHTML());
 
 export default site;
