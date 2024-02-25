@@ -1,0 +1,1463 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<feed xmlns="http://www.w3.org/2005/Atom">
+	<title>レンコン畑でつかまえて</title>
+	<subtitle></subtitle>
+	<link href="https://www.jyuch.dev/feed.xml" rel="self"/>
+	<link href="https://www.jyuch.dev/"/>
+	
+	<updated>2024-02-25T08:01:33Z</updated>
+	<id>https://www.jyuch.dev/</id>
+	<author>
+		<name>jyuch</name>
+		<email></email>
+	</author>
+	<entry>
+		<title>RustでもOTLPでJaegerにテレメトリを送りたい</title>
+		<link href="https://www.jyuch.dev/posts/2023/09-08-rust-with-otlp/"/>
+		<updated>2023-09-18T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2023/09-08-rust-with-otlp/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;テキストベースのロギングは時代遅れ、時代はOpenTelemetryを使ったハイカラな計装！！ということでタイトル通りに試してみます。&lt;/p&gt;
+&lt;p&gt;とはいってもRust関係でまとまった記事を書いてくださってるのは以下のブログくらいみたいなので、とりあえずは以下の記事を参考に試してみます。&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://blog.ymgyt.io/entry/starting_opentelemetry_with_rust/&quot;&gt;RustでOpenTelemetryをはじめよう&lt;/a&gt;&lt;/p&gt;
+&lt;h1&gt;OpenTelemetry&lt;/h1&gt;
+&lt;p&gt;OpenTelemetryはそれぞれの監視ツールベンダが提供してきたAPIを共通化し、アプリケーションコードから可能な限りベンダ固有のコードを除去することを目的としてる。と個人的に認識しています。&lt;/p&gt;
+&lt;p&gt;例えばNew RelicからAWS X-Rayに監視バックエンドを変更しようとした際、OpenTelemetryを使用していればアプリケーションのコネクタ部分だけ変えればすぐにメトリクスの送信先を変えられるといった感じらしいです。&lt;/p&gt;
+&lt;p&gt;今回はシングルバイナリでサクッと建てられる&lt;a href=&quot;https://www.jaegertracing.io/&quot;&gt;Jaeger&lt;/a&gt;を使います。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bat&quot;&gt;setlocal
+
+set BASE_DIR=%~dp0
+
+set SPAN_STORAGE_TYPE=badger
+set BADGER_EPHEMERAL=false
+set BADGER_DIRECTORY_VALUE=C:&#92;path&#92;to&#92;.jaeger&#92;data
+set BADGER_DIRECTORY_KEY=C:&#92;path&#92;to&#92;.jaeger&#92;key
+
+start http://localhost:16686 
+call %BASE_DIR%jaeger-all-in-one.exe
+
+endlocal
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;みたいなバッチを作っておくとサクッと立ち上げられるので便利です。&lt;/p&gt;
+&lt;h1&gt;tracingの初期化&lt;/h1&gt;
+&lt;p&gt;今回はトレーシングライブラリとして&lt;a href=&quot;https://github.com/tokio-rs/tracing&quot;&gt;tokio-rs/tracing&lt;/a&gt;を使用します。&lt;/p&gt;
+&lt;p&gt;tracingのレイヤーとしてOpenTelemetryのテレメトリを送信するControllerを差し込みます。&lt;/p&gt;
+&lt;p&gt;tracing自体はtokioには依存せず使用できますが、テレメトリの送信にgRPCを使用しており、gRPCがtonicを使用しているため自動的にtokioに依存することになります。
+が、そこそこの規模のアプリケーションを開発する場合ほぼtokioを使うことになると思うので特に気にしなくても良いと思います。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;use opentelemetry::sdk::metrics::controllers::BasicController;
+use opentelemetry_otlp::WithExportConfig;
+
+pub(crate) struct OtelInitGuard();
+
+impl Drop for OtelInitGuard {
+    fn drop(&amp;amp;mut self) {
+        opentelemetry::global::shutdown_tracer_provider();
+    }
+}
+
+// https://github.com/open-telemetry/opentelemetry-rust/blob/d4b9befea04bcc7fc19319a6ebf5b5070131c486/examples/basic-otlp/src/main.rs#L35-L52
+fn build_metrics_controller() -&amp;gt; BasicController {
+    use opentelemetry::sdk::export::metrics::aggregation::cumulative_temporality_selector;
+    use opentelemetry::sdk::metrics::selectors::simple::histogram;
+
+    opentelemetry_otlp::new_pipeline()
+        .metrics(
+            histogram(Vec::new()),
+            cumulative_temporality_selector(),
+            opentelemetry::runtime::Tokio,
+        )
+        .with_exporter(
+            opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_endpoint(&amp;quot;http://localhost:4317&amp;quot;),
+        )
+        .build()
+        .expect(&amp;quot;Failed to build metrics controller&amp;quot;)
+}
+
+pub(crate) fn init_tracing(service: &amp;amp;&#39;static str, version: &amp;amp;&#39;static str) -&amp;gt; OtelInitGuard {
+    use opentelemetry::sdk::trace::{RandomIdGenerator, Sampler};
+
+    // Configure otel exporter.
+    let tracer = opentelemetry_otlp::new_pipeline()
+        .tracing()
+        .with_exporter(
+            opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_endpoint(&amp;quot;http://localhost:4317&amp;quot;),
+        )
+        .with_trace_config(
+            opentelemetry::sdk::trace::config()
+                .with_sampler(Sampler::AlwaysOn)
+                .with_id_generator(RandomIdGenerator::default())
+                .with_resource(opentelemetry::sdk::Resource::new(vec![
+                    opentelemetry::KeyValue::new(&amp;quot;service.name&amp;quot;, service),
+                    opentelemetry::KeyValue::new(&amp;quot;service.version&amp;quot;, version),
+                ])),
+        )
+        .install_batch(opentelemetry::runtime::Tokio)
+        // .install_simple()
+        .expect(&amp;quot;Not running in tokio runtime&amp;quot;);
+
+    // Compatible layer with tracing.
+    let otel_trace_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+    let otel_metrics_layer = tracing_opentelemetry::MetricsLayer::new(build_metrics_controller());
+
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+
+    tracing_subscriber::Registry::default()
+        .with(tracing_subscriber::fmt::Layer::new())
+        .with(otel_trace_layer)
+        .with(otel_metrics_layer)
+        .with(tracing_subscriber::filter::LevelFilter::INFO)
+        .init();
+
+    OtelInitGuard()
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h1&gt;アプリケーションコード&lt;/h1&gt;
+&lt;p&gt;起動時にOpenTelemetryの初期化さえしてしまえば、あとは普通にtracingを使うだけです。&lt;/p&gt;
+&lt;p&gt;メソッドに&lt;code&gt;#[instrument]&lt;/code&gt;を貼れば自動的にSpanを作ってコンテキストを埋め込んでくれるので便利です。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;mod otl;
+
+use crate::otl::init_tracing;
+use tracing::{error, info, instrument};
+
+#[instrument]
+async fn start(x: i32, y: i32) -&amp;gt; Option&amp;lt;i32&amp;gt; {
+    add(multiply(x, y).await, multiply(x, y).await).await
+}
+
+#[instrument]
+async fn add(x: i32, y: i32) -&amp;gt; Option&amp;lt;i32&amp;gt; {
+    let ans = x + y;
+
+    if ans &amp;lt;= 10 {
+        info!(
+            ans = ans,
+            &amp;quot;特に出すべきログがないからとりあえず適当なメッセージを出しています&amp;quot;
+        );
+        Some(ans)
+    } else {
+        error!(ans = ans, &amp;quot;something went wrong&amp;quot;);
+        None
+    }
+}
+
+#[instrument]
+async fn multiply(x: i32, y: i32) -&amp;gt; i32 {
+    x * y
+}
+
+#[tokio::main]
+async fn main() {
+    let service = env!(&amp;quot;CARGO_PKG_NAME&amp;quot;);
+    let version = env!(&amp;quot;CARGO_PKG_VERSION&amp;quot;);
+
+    let _guard = init_tracing(service, version);
+
+    let value = start(1, 2).await;
+    println!(&amp;quot;{:?}&amp;quot;, value);
+
+    let value = start(10, 22).await;
+    println!(&amp;quot;{:?}&amp;quot;, value);
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/09-08-rust-with-otlp/jaeger.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/jyuch/tracing_otlp&quot;&gt;jyuch/tracing_otlp&lt;/a&gt;&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>ドメインをGoogle DomainからCloudflareに移管したお話</title>
+		<link href="https://www.jyuch.dev/posts/2023/08-16-domain-transfer-google-domain-to-cloudflare/"/>
+		<updated>2023-08-16T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2023/08-16-domain-transfer-google-domain-to-cloudflare/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;このエントリが公開されているということは、すでに&lt;code&gt;jyuch.dev&lt;/code&gt;ドメインはGoogle DomainからCloudflareに移管されているということになります。&lt;/p&gt;
+&lt;p&gt;皆さんご存じの通り&lt;s&gt;サービスのやめ癖がひどい&lt;/s&gt;Googleさんがドメイン事業をSquarespaceに売却してしまい、ドメイン維持費が倍近くなってしまったのでCloudflareにドメインを移管しました。&lt;/p&gt;
+&lt;p&gt;ドメイン事業の売却自体は随分と前からアナウンスされていたのですが、Cloudflareが&lt;code&gt;.dev&lt;/code&gt;TLDをサポートしたのが最近だったので移管が今更になってしまったという感じです。&lt;/p&gt;
+&lt;h1&gt;移管&lt;/h1&gt;
+&lt;p&gt;移管の作業自体はググればいくらでも出てくるので割愛します。&lt;/p&gt;
+&lt;p&gt;あくまでもドメインレジストラの移管とDNSを移行しただけなので、TLSの終端やプロキシなどのCloudflareさんのCDNサービスへの切り替えとかは一切していません。&lt;/p&gt;
+&lt;h1&gt;おわりに&lt;/h1&gt;
+&lt;p&gt;Cloudflareさんのドメイン維持費は年間$10なので、日本円は為替によって若干変わります。&lt;/p&gt;
+&lt;p&gt;決済時に異常な円安になっていないことを共に祈りましょう。&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>Rustでも文字数をカウントしたい</title>
+		<link href="https://www.jyuch.dev/posts/2023/03-17-rust-and-unicode/"/>
+		<updated>2023-03-17T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2023/03-17-rust-and-unicode/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;後輩にUnicodeを熱く語ったら引かれました。どうも弊社です&lt;/p&gt;
+&lt;p&gt;今まで結構Rustのコードを書いていましたが、そういえば日本語周りの挙動を確認していなかったなということで確認してみます。&lt;/p&gt;
+&lt;h1&gt;前提知識&lt;/h1&gt;
+&lt;p&gt;この辺はドキュメントに書いてあるので割と周知な内容なんじゃないかなという所ですが、Rustは内部的には文字列はUTF-8で扱っています。&lt;/p&gt;
+&lt;p&gt;背景は調べてないので知りません。
+多分JSONのシリアライズ・デシリアライズとかで変換コストが減るとか、メモリ消費量を減らしたいとかなんとかじゃないでしょうか。&lt;/p&gt;
+&lt;h1&gt;文字数カウント&lt;/h1&gt;
+&lt;p&gt;&lt;code&gt;String&lt;/code&gt;には&lt;code&gt;pub fn len(&amp;amp;self) -&amp;gt; usize&lt;/code&gt;なメソッドが生えていますが、このメソッドはバイト数を返してきます。
+Rustのドキュメントは文字はUTF-8であることをしつこいくらい書いているので、納得できる挙動ではあります。&lt;/p&gt;
+&lt;p&gt;が、我々日本人は漢字を使わないといけない為、それでは困るわけです。&lt;/p&gt;
+&lt;p&gt;そこで、&lt;code&gt;pub fn chars(&amp;amp;self) -&amp;gt; Chars&amp;lt;&#39;_&amp;gt;&lt;/code&gt;なメソッドを呼び出して&lt;code&gt;char&lt;/code&gt;のイテレータを取得し、その数を数えれば文字数をカウント出来ます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;let a = String::from(&amp;quot;Hello World&amp;quot;);
+let b = String::from(&amp;quot;こんにちは&amp;quot;);
+
+println!(&amp;quot;{} {} {}&amp;quot;, a, a.len(), a.chars().count());
+println!(&amp;quot;{} {} {}&amp;quot;, b, b.len(), b.chars().count());
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;Hello World 11 11
+こんにちは 15 5
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h1&gt;本当にそれでいいの？&lt;/h1&gt;
+&lt;p&gt;ここまでの説明で、「&lt;code&gt;a.chars().count()&lt;/code&gt;を呼び出せばいいのね！」と納得して帰る人は文字コードの怖さを知らない人です。
+Unicode規格票で素振りを1000回やってから出直してきてください。&lt;/p&gt;
+&lt;p&gt;上の文をもう一度読んでみましょう。&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;&lt;code&gt;pub fn chars(&amp;amp;self) -&amp;gt; Chars&amp;lt;&#39;_&amp;gt;&lt;/code&gt;なメソッドを呼び出して&lt;code&gt;char&lt;/code&gt;のイテレータを取得し、&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;そうです。このメソッドは&lt;code&gt;char&lt;/code&gt;、すなわちコードポイントのイテレータを返すに過ぎないわけです。&lt;/p&gt;
+&lt;p&gt;この方法だと「は（U+306F）」+「゜（U+309A）」で表現される「ぱ」は容赦なく2文字としてカウントされます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;let a = vec![&#39;は&#39;, &#39;&#92;u{309A}&#39;];
+let a: String = a.iter().collect();
+println!(&amp;quot;{} {} {}&amp;quot;, a, a.len(), a.chars().count());
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;ぱ 6 2
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;ソフトウェアエンジニア相手なら「内部的には2文字なんですよ～」と言えばいいだけ？ですが、一般人にそんなことを言っても「何言ってんだこいつ」となるだけです。&lt;/p&gt;
+&lt;h1&gt;Unicode正規化&lt;/h1&gt;
+&lt;p&gt;しかし、我々にはアクセント記号などを分解後再結合できるUnicode正規化という法具が存在します。&lt;/p&gt;
+&lt;p&gt;が、Rustの標準ライブラリに入ってません。
+&lt;a href=&quot;https://github.com/unicode-rs/unicode-normalization&quot;&gt;unicode-normalization&lt;/a&gt;を使うしかなさそうです。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-toml&quot;&gt;[dependencies]
+unicode-normalization = &amp;quot;0.1&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;fn test(value: &amp;amp;Vec&amp;lt;char&amp;gt;) {
+    use unicode_normalization::UnicodeNormalization as _;
+
+    let str: String = value.iter().collect();
+    println!(&amp;quot;{} {} {}&amp;quot;, str, str.len(), str.chars().count());
+
+    let str = str.nfc().to_string();
+    println!(&amp;quot;{} {} {}&amp;quot;, str, str.len(), str.chars().count());
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;let a = vec![&#39;は&#39;, &#39;&#92;u{309A}&#39;];
+test(&amp;amp;a);
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;ぱ 6 2
+ぱ 3 1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;しかし、結合後の文字が収録されていない文字はやはりだめです。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;let a = vec![&#39;か&#39;, &#39;&#92;u{309A}&#39;];
+test(&amp;amp;a);
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;か゚ 6 2
+か゚ 6 2
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h1&gt;Unicodeテキストセグメンテーション&lt;/h1&gt;
+&lt;p&gt;そこで、Unicode® Standard Annex #29 UNICODE TEXT SEGMENTATIONの出番です。&lt;/p&gt;
+&lt;p&gt;こいつでGrapheme Cluster Boundaries（書記素単位）でぶった切ってやればいいのです。&lt;/p&gt;
+&lt;p&gt;同じunicode-rsグループが開発している&lt;a href=&quot;https://github.com/unicode-rs/unicode-segmentation&quot;&gt;unicode-segmentation&lt;/a&gt;クレートを使用します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-toml&quot;&gt;[dependencies]
+unicode-segmentation = &amp;quot;1&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;fn test(value: &amp;amp;Vec&amp;lt;char&amp;gt;) {
+    use unicode_normalization::UnicodeNormalization as _;
+    use unicode_segmentation::UnicodeSegmentation as _;
+
+    let str: String = value.iter().collect();
+    println!(&amp;quot;{} {} {}&amp;quot;, str, str.len(), str.chars().count());
+
+    let str = str.nfc().to_string();
+    println!(&amp;quot;{} {} {}&amp;quot;, str, str.len(), str.chars().count());
+
+    let g = str.graphemes(true).collect::&amp;lt;Vec&amp;lt;&amp;amp;str&amp;gt;&amp;gt;();
+    println!(&amp;quot;{} {} {}&amp;quot;, str, str.len(), g.len());
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;let a = vec![&#39;か&#39;, &#39;&#92;u{309A}&#39;];
+test(&amp;amp;a);
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;か゚ 6 2
+か゚ 6 2
+か゚ 6 1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;なしとげました&lt;/p&gt;
+&lt;p&gt;これならみんな大好きIVSも正しくカウントできます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;let a = vec![&#39;&#92;u{8FBB}&#39;, &#39;&#92;u{E0100}&#39;];
+test(&amp;amp;a);
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;辻󠄀 7 2
+辻󠄀 7 2
+辻󠄀 7 1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;let a = vec![&#39;&#92;u{1F385}&#39;, &#39;&#92;u{1F3FF}&#39;];
+test(&amp;amp;a);
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;🎅🏿 8 2
+🎅🏿 8 2
+🎅🏿 8 1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h1&gt;おわりに&lt;/h1&gt;
+&lt;p&gt;文字コードを舐めると死にます&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>2022年の振り返りとか</title>
+		<link href="https://www.jyuch.dev/posts/2023/03-03-look-back-2022/"/>
+		<updated>2023-03-03T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2023/03-03-look-back-2022/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;そういえば2022年の振り返りとかをやっていなかったなという事で、いまさらながら振り返りです。&lt;/p&gt;
+&lt;h1&gt;プログラミング&lt;/h1&gt;
+&lt;p&gt;個人的な活動としては、2021年はほぼGitHubなどにコードを上げていなかったので、2022年はアウトプットを出そうと心がけていました。
+製品レベルではないにせよ、個人で使うようなRustでコンソールツールを実装してGitHubに上げられたのかなという感じです。
+ただ、かなり小規模なツールばかりなので2023年では何か大規模なプログラムを組み上げたいですね。&lt;/p&gt;
+&lt;p&gt;お仕事としては今年も（？）かなりのJavaとちょっとのC#を書きましたが、特に目新しい何かがあったわけではありませんでした。&lt;/p&gt;
+&lt;p&gt;正直今のお仕事で出来る限界が見えてきてしまっているので、2023年は新しいお仕事に挑戦してもいいかもしれないと感じるお年頃です。&lt;/p&gt;
+&lt;h1&gt;ブログ&lt;/h1&gt;
+&lt;p&gt;正直ほとんど書かなかったですね。&lt;/p&gt;
+&lt;p&gt;長く書いていると自分の中の記事のクオリティのハードルがどんどん上がっていくのを感じます。
+きれいにまとめて体系立てて書かないといけないんじゃないかみたいな観念ですね。&lt;/p&gt;
+&lt;p&gt;まぁ無理に書こうとしてもｱﾚなので、2023年もほどほどに書けることを書いていこうというスタンスでやっていこうと思います。&lt;/p&gt;
+&lt;h1&gt;おわりに&lt;/h1&gt;
+&lt;p&gt;結論としては無理せず今後もやりたいようにやっていきましょうという感じです。&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>k3sでもローカルなDockerリポジトリを使用したい</title>
+		<link href="https://www.jyuch.dev/posts/2022/use-mirror-repository-in-k3s/"/>
+		<updated>2022-11-16T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2022/use-mirror-repository-in-k3s/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://www.jyuch.dev/posts/2022/build-container-image-in-k3s-using-buildkit/&quot;&gt;前回&lt;/a&gt;k3s上でBuildKitを使用してコンテナイメージをビルドしてそのままk3sに読み込ませるという割と強引な事をやったのですが、やっぱりちゃんとコンテナレジストリを立てて運用した方がいろいろ良いよねというお話です。&lt;/p&gt;
+&lt;p&gt;今回はローカルにコンテナレジストリを立てて、Pull-throughなキャッシュを立ててDocker Hub君を労わりつつ、独自のイメージをホストさせます。&lt;/p&gt;
+&lt;h2&gt;コンテナレジストリ&lt;/h2&gt;
+&lt;p&gt;今回はコンテナレジストリとして&lt;a href=&quot;https://www.sonatype.com/products/repository-oss-download&quot;&gt;Sonatype Nexus Repository Manager OSS&lt;/a&gt;を使用します。&lt;/p&gt;
+&lt;p&gt;以下のような感じでリポジトリを立てます。&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;名前&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;タイプ&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;ポート&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;説明&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;docker-group&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;group&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;9000&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;下の二つのリポジトリを仮想的にまとめるリポジトリ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;docker-hosted&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;hosted&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;9001&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;独自のコンテナイメージをホストするリポジトリ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;docker.io-proxy&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;proxy&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;9002&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Docker Hubのミラーキャッシュ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;k3s側でクレデンシャルをｺﾈｺﾈするのがめんどくさいので私は「Allow anonymous doker
+pull」にチェックボックスを入れて匿名でのpullを許可させましたが、この辺は組織のポリシーでいい感じに設定すればいいと思います。&lt;/p&gt;
+&lt;p&gt;また、「Anonymous Access」から「Allow anonimous user to access the
+server」にチェックを入れ、「Realms」で「Docker Bearer Token
+Realms」を有効にしておかないと匿名のpullが弾かれます。（1敗）&lt;/p&gt;
+&lt;h2&gt;Docker側の設定&lt;/h2&gt;
+&lt;p&gt;そうしたらまずDockerがこのリポジトリからpull出来るようにします。&lt;/p&gt;
+&lt;p&gt;お好みに合わせて、&lt;code&gt;/etc/hosts&lt;/code&gt;にリポジトリをホストしているサーバのIPアドレスを追加します。
+長いとイメージ名を指定するときにつらいので、私は&lt;code&gt;ocr&lt;/code&gt;みたいに短い名前にしてしまっています。&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;/etc/docker/daemon.json&lt;/code&gt;でDocker
+Hubの代わりにアクセスするレジストリミラーとhttpでアクセスするためのおまじないを設定します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-json&quot;&gt;{
+  &amp;quot;insecure-registries&amp;quot;: [&amp;quot;ocr:9000&amp;quot;, &amp;quot;ocr:9001&amp;quot;],
+  &amp;quot;registry-mirrors&amp;quot;: [&amp;quot;http://ocr:9000&amp;quot;]
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;勘のいい人は気が付いたかと思いますが、docker-groupの9000だけではなくdocker-hostedの9001も登録しています。&lt;/p&gt;
+&lt;p&gt;弊社も動作検証中に気が付いたのですが、OSSのNexus君はgroupリポジトリへのpushは出来ないみたいです。&lt;/p&gt;
+&lt;p&gt;そのため、イメージのpushはhosted側に行い、pullはgroup側から行うことにしました。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;# Sonatype社からの課金のお誘い
+$ docker push ocr:9000/jyuch/blog:20221115   
+The push refers to repository [ocr:9000/jyuch/blog]
+a2a9af77c400: Layer already exists 
+a2e59a79fae0: Layer already exists 
+4091cd312f19: Layer already exists 
+9e7119c28877: Layer already exists 
+2280b348f4d6: Layer already exists 
+e74d0d8d2def: Layer already exists 
+a12586ed027f: Layer already exists 
+denied: Deploying to groups is a PRO-licensed feature. See https://links.sonatype.com/product-nexus-repository
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;あとは&lt;code&gt;ocr:9001&lt;/code&gt;側で&lt;code&gt;docker login&lt;/code&gt;をすればOKです。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;docker login ocr:9001
+Username: kawata
+Password: 
+WARNING! Your password will be stored unencrypted in /home/jyuch/.docker/config.json.
+Configure a credential helper to remove this warning. See
+https://docs.docker.com/engine/reference/commandline/login/#credentials-store
+
+Login Succeeded
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;k3s&lt;/h2&gt;
+&lt;p&gt;とりあえずDocker側pushとpullが出来ることを確認できたら、次はk3s側です。&lt;/p&gt;
+&lt;p&gt;同様に&lt;code&gt;/etc/hosts&lt;/code&gt;を編集し、&lt;code&gt;/etc/rancher/k3s/registries.yaml&lt;/code&gt;を編集します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;mirrors:
+  docker.io:
+    endpoint:
+      - &amp;quot;http://ocr:9000&amp;quot;
+  &amp;quot;ocr:9000&amp;quot;:
+    endpoint:
+      - &amp;quot;http://ocr:9000&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;こちらではイメージのpushはしない為、group側の設定だけで大丈夫です。&lt;/p&gt;
+&lt;p&gt;適当なPodを展開してちゃんとイメージを引っ張ってきて来れているかを確認します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blog-nginx-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: blog-nginx
+  template:
+    metadata:
+      labels:
+        app: blog-nginx
+    spec:
+      containers:
+      - name: blog-container
+        image: ocr:9000/jyuch/blog:20221116
+        ports:
+          - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: blog-nginx
+spec:
+  type: LoadBalancer
+  ports:
+    - name: &amp;quot;http-port&amp;quot;
+      protocol: &amp;quot;TCP&amp;quot;
+      port: 18080
+      targetPort: 80
+  selector:
+    app: blog-nginx
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;おわりに&lt;/h2&gt;
+&lt;p&gt;とりあえずこれでPull-throughなキャッシュと独自リポジトリが立てられました。&lt;/p&gt;
+&lt;p&gt;なんかBuildKit側がPull-throughキャッシュを見ていない疑惑がありますが、そもそもあの子キャッシュの扱いがよくわかんないのでまぁその辺はおいおい確認していきます。&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>k3sでもBuildKitを使用してイメージをビルドしたい</title>
+		<link href="https://www.jyuch.dev/posts/2022/build-container-image-in-k3s-using-buildkit/"/>
+		<updated>2022-11-12T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2022/build-container-image-in-k3s-using-buildkit/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;家で運用しているサーバ機&lt;s&gt;をアップデートに失敗して吹き飛ばした&lt;/s&gt;とある事情で空いたので、k3sをインストールしました。&lt;/p&gt;
+&lt;p&gt;せっかく？なので、k3s上でイメージをビルドできるようにしておくとなんか捗りそうな気がするので方法を確認しておきます。&lt;/p&gt;
+&lt;h2&gt;Dockerfileの準備&lt;/h2&gt;
+&lt;p&gt;とりあえずサクッとRustでマルチステージビルドを行うDockerfileを用意します。&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/jyuch/rust-multistage-build&quot;&gt;jyuch/rust-multistage-build&lt;/a&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-dockerfile&quot;&gt;FROM rust:1.65.0-bullseye AS builder
+
+ADD . /src
+WORKDIR /src
+RUN --mount=type=cache,target=/usr/local/cargo/registry &#92;
+    cargo build --release
+
+FROM gcr.io/distroless/cc
+
+COPY --from=builder /src/target/release/ferris_says ferris_says
+CMD [&amp;quot;./ferris_says&amp;quot;]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;とりあえずDockerのBuildKitでビルドできるか確認しておきます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ docker buildx build -t ferris_says:latest .
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;実行するとこんな感じです。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ docker run --rm -it ferris_says:latest
+ __________________________
+&amp;lt; Hello fellow Rustaceans! &amp;gt;
+ --------------------------
+        &#92;
+         &#92;
+            _~^~^~_
+        &#92;) /  o o  &#92; (/
+          &#39;_   -   _&#39;
+          / &#39;-----&#39; &#92;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;k3s側のビルド用のPodの用意&lt;/h2&gt;
+&lt;p&gt;k3s側でビルドするのに必要なマニフェストはBuildKit側で用意してくれていたのでそれをそのまま使用します。&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/moby/buildkit/tree/master/examples/kubernetes&quot;&gt;Kubernetes manifests for BuildKit&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;今回はとりあえずPodで生やします。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ kubectl apply -f pod.rootless.yaml
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ kubectl get pods
+NAME        READY   STATUS    RESTARTS   AGE
+buildkitd   1/1     Running   0          124m
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;BuildKitを使用してのビルド&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;buildctl&lt;/code&gt;を使用してビルドをします。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;buildctl --addr kube-pod://buildkitd build &#92;
+  --frontend dockerfile.v0 &#92;
+  --local context=. &#92;
+  --local dockerfile=. &#92;
+  --output type=oci,name=ferris_says:latest &amp;gt; ferris_says.tar
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;ビルドがうまくいくとイメージがtarに詰まって出てくるので、あとはそれをk3sに突っ込むだけです。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ sudo k3s ctr images import ferris_says.tar
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ sudo k3s crictl images                                                               
+IMAGE                                        TAG                    IMAGE ID            SIZE
+docker.io/library/ferris_says                latest                 7948ed6b9ec95       10.6MB
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;ここまで来ればあとはイメージを動かすだけです。&lt;/p&gt;
+&lt;p&gt;この時、&lt;code&gt;--image-pull-policy=Never&lt;/code&gt;を指定してイメージをプルしないようにしないとイメージ取得で詰まっていい感じに動いてくれません。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ kubectl run ferris-says --restart=Never --image=docker.io/library/ferris_says:latest --rm -it --image-pull-policy=Never
+ __________________________
+&amp;lt; Hello fellow Rustaceans! &amp;gt;
+ --------------------------
+        &#92;
+         &#92;
+            _~^~^~_
+        &#92;) /  o o  &#92; (/
+          &#39;_   -   _&#39;
+          / &#39;-----&#39; &#92;
+pod &amp;quot;ferris-says&amp;quot; deleted
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>ブログをはてなからGithub Pageに移したお話</title>
+		<link href="https://www.jyuch.dev/posts/2022/blog-move-from-hatena-to-github-page/"/>
+		<updated>2022-10-15T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2022/blog-move-from-hatena-to-github-page/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;GitHub Pageからこんにちは。どうも弊社です。&lt;/p&gt;
+&lt;p&gt;実は数年前から独自ドメイン&lt;code&gt;jyuch.dev&lt;/code&gt;を所持しており、独自ドメインでブログをやるついでにはてなブログからGitHub
+Pageに移したいと考えていました。&lt;/p&gt;
+&lt;p&gt;それとは別に最近ちょくちょく&lt;a href=&quot;https://deno.land/&quot;&gt;Deno&lt;/a&gt;を触っており、Denoで動く静的サイトジェネレータである&lt;a href=&quot;https://lume.land/&quot;&gt;Lume&lt;/a&gt;がいい感じそうだったので勢いでブログを移行してしまおうというお話です。&lt;/p&gt;
+&lt;h2&gt;テンプレートから作成&lt;/h2&gt;
+&lt;p&gt;とはいえ弊社はフロントエンド周りに詳しいわけではないので、とりあえずテンプレートをベースに作って後々いい感じに調整していきたいと思います。&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/lumeland/base-blog&quot;&gt;lumeland/base-blog&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;テンプレートをプルしてきたらとりあえず&lt;code&gt;_data/site.yml&lt;/code&gt;をいじっていい感じにします。
+&lt;code&gt;title&lt;/code&gt;がブログ名になるのでとりあえずここだけ変えておけばいいのではないでしょうか。&lt;/p&gt;
+&lt;p&gt;あとは以下のコマンドでサーバが起動するので、&lt;a href=&quot;http://localhost:3000/&quot;&gt;http://localhost:3000&lt;/a&gt;にアクセスするとなんかいい感じのページが見えるようになると思います。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;deno task serve
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;GitHub Action の設定&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;.github/workflow/build.yml&lt;/code&gt;にGitHub Actionの設定があるので、以下の部分を自分の環境に合わせて書き直します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;- name: Build site
+  run: |
+    deno task build --location=https://www.jyuch.dev/
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;あとはGitHubにプッシュするだけでいい感じにGitHub
+Workflowが動いて&lt;code&gt;gh-pages&lt;/code&gt;ブランチにビルド結果が展開されるので、設定からGitHubのページとして&lt;code&gt;ph-pages&lt;/code&gt;を使うように設定すれば完了です。&lt;/p&gt;
+&lt;h2&gt;Netlify CMSの削除&lt;/h2&gt;
+&lt;p&gt;CMSは使わないつもりなので、デフォルトで入っているNetlify CMSは消しておきます。&lt;/p&gt;
+&lt;p&gt;また、&lt;code&gt;_config.ts&lt;/code&gt;から&lt;code&gt;.use(netlifyCMS())&lt;/code&gt;の記述を消しておきます。&lt;/p&gt;
+&lt;h2&gt;おわりに&lt;/h2&gt;
+&lt;p&gt;フォントサイズとか調整したいところはいろいろあるのですが、いきなり100%の完成度を求めてもｱﾚですし、個人ブログなのでその辺はちょくちょく手を入れていこうと思います。&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>PostgreSQLでもWALアーカイブを使用してPITRしたい</title>
+		<link href="https://www.jyuch.dev/posts/2021/wal-archive-and-pitr/"/>
+		<updated>2021-11-08T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2021/wal-archive-and-pitr/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;ここではベースバックアップとWALアーカイブを組み合わせ、クラッシュ直前の状態までクラスタを復旧させる方法を確認します。&lt;/p&gt;
+&lt;p&gt;また、リカバリオプションを確認し、任意の時点までのリカバリを行えることを確認します。&lt;/p&gt;
+&lt;h2&gt;諸元&lt;/h2&gt;
+&lt;p&gt;ここでは、以下のディレクトリにデータベースクラスタとWALアーカイブを保存します。&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;役割&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;パス&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;データベースクラスタ（プライマリ）&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;/home/jyuch/pgdata/11/primary&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;データベースクラスタ（バックアップ）&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;/home/jyuch/pgdata/11/standby&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;WALアーカイブ&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;/home/jyuch/pgdata/11/walarch&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2&gt;データベースクラスタの初期化&lt;/h2&gt;
+&lt;p&gt;それとなくデータベースクラスタを初期化します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;initdb --no-locale --encoding=UTF-8 -D /home/jyuch/pgdata/11/primary
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;アーカイブ先を作成します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;mkdir -p /home/jyuch/pgdata/11/walarch
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;postgres.conf&lt;/code&gt;を編集して、WALをアーカイブ先にアーカイブするように構成します。
+また、1分で強制的にWALファイルをローテートするようにします。（本番用途では短すぎる値なので、もっと伸ばした方が良いです。）&lt;/p&gt;
+&lt;p&gt;また、確実にチェックポイント前にデータベースが吹っ飛ぶように&lt;code&gt;checkpoint_timeout&lt;/code&gt;を極端な値にします。（テスト用の構成なので、本番では絶対にマネしないでね）&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;archive_mode = on
+archive_command = &#39;test ! -f /home/jyuch/pgdata/11/walarch/%f &amp;amp;&amp;amp; cp %p /home/jyuch/pgdata/11/walarch/%f&#39;
+archive_timeout = 1min
+checkpoint_timeout = 1d
+max_wal_size = 4GB
+min_wal_size = 1GB
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pg_ctl -D /home/jyuch/pgdata/11/primary start
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;データベースを作成します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ psql postgres
+psql (11.12)
+Type &amp;quot;help&amp;quot; for help.
+
+postgres=# CREATE DATABASE test;
+CREATE DATABASE
+postgres=# &#92;q
+
+$ psql test    
+psql (11.12)
+Type &amp;quot;help&amp;quot; for help.
+
+test=# CREATE TABLE hoge (msg varchar(100));
+CREATE TABLE
+test=# INSERT INTO hoge VALUES (&#39;database initialized&#39;);
+INSERT 0 1
+test=# &#92;q
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;一度、強制的にチェックポイントを走らせます。&lt;/p&gt;
+&lt;p&gt;これで、この時点の変更はすべてディスクに書き出された事が保証されます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;psql -c &amp;quot;CHECKPOINT&amp;quot; postgres
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;pg_basebackup&lt;/code&gt;でベースバックアップを取得します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pg_basebackup -h localhost -D /home/jyuch/pgdata/11/standby -X stream --progress
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;データベースクラスタの破壊&lt;/h2&gt;
+&lt;p&gt;新しいレコードを挿入したら、WALがローテートされるのを待ってからクラスタを南無三します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;psql -c &amp;quot;INSERT INTO hoge VALUES (&#39;before crash&#39;)&amp;quot; test; &#92;
+  sleep 70; &#92;
+  pg_ctl stop -m immediate -D /home/jyuch/pgdata/11/primary
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;リカバリ&lt;/h2&gt;
+&lt;p&gt;ベースバックアップを採ったディレクトリに&lt;code&gt;recovery.conf&lt;/code&gt;を追加し、WALアーカイブからのコピーコマンドを追加します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;restore_command = &#39;cp /home/jyuch/pgdata/11/walarch/%f %p&#39;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;追加したらリカバリ側を起動させます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ pg_ctl -D /home/jyuch/pgdata/11/standby start
+waiting for server to start....2021-08-12 10:23:20.654 JST [16316] LOG:  listening on IPv4 address &amp;quot;127.0.0.1&amp;quot;, port 5432
+2021-08-12 10:23:20.681 JST [16316] LOG:  listening on Unix socket &amp;quot;/tmp/.s.PGSQL.5432&amp;quot;
+2021-08-12 10:23:20.734 JST [16317] LOG:  database system was interrupted; last known up at 2021-08-12 10:02:44 JST
+2021-08-12 10:23:20.837 JST [16317] LOG:  starting archive recovery
+2021-08-12 10:23:20.851 JST [16317] LOG:  restored log file &amp;quot;000000010000000000000004&amp;quot; from archive
+2021-08-12 10:23:21.076 JST [16317] LOG:  redo starts at 0/4000028
+2021-08-12 10:23:21.085 JST [16317] LOG:  consistent recovery state reached at 0/40000F8
+2021-08-12 10:23:21.085 JST [16316] LOG:  database system is ready to accept read only connections
+2021-08-12 10:23:21.099 JST [16317] LOG:  restored log file &amp;quot;000000010000000000000005&amp;quot; from archive
+ done
+server started
+cp: cannot stat &#39;/home/jyuch/pgdata/11/walarch/000000010000000000000006&#39;: No such file or directory
+2021-08-12 10:23:21.264 JST [16317] LOG:  redo done at 0/5000170
+2021-08-12 10:23:21.264 JST [16317] LOG:  last completed transaction was at log time 2021-08-12 10:06:19.604226+09
+2021-08-12 10:23:21.294 JST [16317] LOG:  restored log file &amp;quot;000000010000000000000005&amp;quot; from archive
+cp: cannot stat &#39;/home/jyuch/pgdata/11/walarch/00000002.history&#39;: No such file or directory
+2021-08-12 10:23:21.445 JST [16317] LOG:  selected new timeline ID: 2
+2021-08-12 10:23:21.651 JST [16317] LOG:  archive recovery complete
+cp: cannot stat &#39;/home/jyuch/pgdata/11/walarch/00000001.history&#39;: No such file or directory
+2021-08-12 10:23:21.905 JST [16316] LOG:  database system is ready to accept connections
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;WALアーカイブからリカバリが走り、ベースバックアップ後に追加したレコードも正常にリストア出来ていることが確認出来ます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ psql -c &amp;quot;SELECT * FROM hoge&amp;quot; test
+         msg          
+----------------------
+ database initialized
+ before crash
+(2 rows)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;PITR&lt;/h2&gt;
+&lt;p&gt;次に、WALアーカイブを利用したPITRを試してみます。&lt;/p&gt;
+&lt;p&gt;先ほどと同様にクラスタを作成・初期化します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;initdb --no-locale --encoding=UTF-8 -D /home/jyuch/pgdata/11/primary
+mkdir -p /home/jyuch/pgdata/11/walarch
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;archive_mode = on
+archive_command = &#39;test ! -f /home/jyuch/pgdata/11/walarch/%f &amp;amp;&amp;amp; cp %p /home/jyuch/pgdata/11/walarch/%f&#39;
+archive_timeout = 1min
+checkpoint_timeout = 1d
+max_wal_size = 4GB
+min_wal_size = 1GB
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pg_ctl -D /home/jyuch/pgdata/11/primary start
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;データベースを作成します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ psql postgres
+psql (11.12)
+Type &amp;quot;help&amp;quot; for help.
+
+postgres=# CREATE DATABASE test;
+CREATE DATABASE
+postgres=# &#92;q
+
+$ psql test    
+psql (11.12)
+Type &amp;quot;help&amp;quot; for help.
+
+test=# CREATE TABLE foo (i timestamp, msg varchar(50));
+CREATE TABLE
+test=# &#92;q
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;以下のスクリプトを実行し、データベースにデータを投入します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;#!/bin/sh
+
+for i in `seq 5`
+do
+  echo &amp;quot;before basebackup `date`&amp;quot;
+  psql -c &amp;quot;INSERT INTO foo VALUES (now(), &#39;before pg_basebackup $i&#39;)&amp;quot; test
+  sleep 60
+done
+
+echo &#39;execute checkpoint&#39;
+psql -c &amp;quot;CHECKPOINT&amp;quot; postgres
+
+echo &#39;execute pg_basebackup&#39;
+pg_basebackup -h localhost -D /home/jyuch/pgdata/11/standby -X stream --progress
+
+for i in `seq 10`
+do
+  echo &amp;quot;after basebackup `date`&amp;quot;
+  psql -c &amp;quot;INSERT INTO foo VALUES (now(), &#39;after pg_basebackup $i&#39;)&amp;quot; test
+  sleep 60
+done
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;投入したデータを確認します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;psql -c &amp;quot;SELECT * FROM foo ORDER BY i DESC&amp;quot; test
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;             i              |          msg           
+----------------------------+------------------------
+ 2021-08-12 12:13:00.403919 | after pg_basebackup 10
+ 2021-08-12 12:12:00.208846 | after pg_basebackup 9
+ 2021-08-12 12:10:59.991466 | after pg_basebackup 8
+ 2021-08-12 12:09:59.796172 | after pg_basebackup 7
+ 2021-08-12 12:08:59.556793 | after pg_basebackup 6
+ 2021-08-12 12:07:59.542937 | after pg_basebackup 5
+ 2021-08-12 12:06:59.533902 | after pg_basebackup 4
+ 2021-08-12 12:05:59.413026 | after pg_basebackup 3
+ 2021-08-12 12:04:59.395453 | after pg_basebackup 2
+ 2021-08-12 12:03:59.386102 | after pg_basebackup 1
+ 2021-08-12 12:02:57.576892 | before pg_basebackup 5
+ 2021-08-12 12:01:57.37541  | before pg_basebackup 4
+ 2021-08-12 12:00:57.161414 | before pg_basebackup 3
+ 2021-08-12 11:59:57.13221  | before pg_basebackup 2
+ 2021-08-12 11:58:57.119013 | before pg_basebackup 1
+(15 rows)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;プライマリのクラスタを停止させます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pg_ctl -D /home/jyuch/pgdata/11/primary stop
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;ここでは、12時8分30秒時点までリカバリするものとします。&lt;/p&gt;
+&lt;p&gt;スクリプト中で取得したベースバックアップに、&lt;code&gt;recovery.conf&lt;/code&gt;を追加し、WALアーカイブからのコピーコマンドとPITRポイントを追加します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;restore_command = &#39;cp /home/jyuch/pgdata/11/walarch/%f %p&#39;
+recovery_target_time  = &#39;2021-08-12 12:08:30 JST&#39;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;追加したらリカバリ側を起動させます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pg_ctl -D /home/jyuch/pgdata/11/standby start
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;waiting for server to start....2021-08-12 12:17:41.105 JST [19993] LOG:  listening on IPv4 address &amp;quot;127.0.0.1&amp;quot;, port 5432
+2021-08-12 12:17:41.142 JST [19993] LOG:  listening on Unix socket &amp;quot;/tmp/.s.PGSQL.5432&amp;quot;
+2021-08-12 12:17:41.179 JST [19994] LOG:  database system was interrupted; last known up at 2021-08-12 12:03:58 JST
+2021-08-12 12:17:41.270 JST [19994] LOG:  starting point-in-time recovery to 2021-08-12 12:08:30+09
+2021-08-12 12:17:41.284 JST [19994] LOG:  restored log file &amp;quot;000000010000000000000008&amp;quot; from archive
+2021-08-12 12:17:41.475 JST [19994] LOG:  redo starts at 0/8000028
+2021-08-12 12:17:41.484 JST [19994] LOG:  consistent recovery state reached at 0/80000F8
+2021-08-12 12:17:41.485 JST [19993] LOG:  database system is ready to accept read only connections
+ done
+server started
+2021-08-12 12:17:41.500 JST [19994] LOG:  restored log file &amp;quot;000000010000000000000009&amp;quot; from archive   
+2021-08-12 12:17:41.697 JST [19994] LOG:  restored log file &amp;quot;00000001000000000000000A&amp;quot; from archive
+2021-08-12 12:17:41.874 JST [19994] LOG:  restored log file &amp;quot;00000001000000000000000B&amp;quot; from archive
+2021-08-12 12:17:42.050 JST [19994] LOG:  restored log file &amp;quot;00000001000000000000000C&amp;quot; from archive
+2021-08-12 12:17:42.296 JST [19994] LOG:  restored log file &amp;quot;00000001000000000000000D&amp;quot; from archive
+2021-08-12 12:17:42.467 JST [19994] LOG:  restored log file &amp;quot;00000001000000000000000E&amp;quot; from archive
+2021-08-12 12:17:42.642 JST [19994] LOG:  recovery stopping before commit of transaction 580, time 2021-08-12 12:08:59.557185+09
+2021-08-12 12:17:42.642 JST [19994] LOG:  recovery has paused
+2021-08-12 12:17:42.642 JST [19994] HINT:  Execute pg_wal_replay_resume() to continue.
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;問題無かったら&lt;code&gt;pg_wal_replay_resume()&lt;/code&gt;を実行しろと言われるので、実行します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ psql postgres
+psql (11.12)
+Type &amp;quot;help&amp;quot; for help.
+
+postgres=# select pg_wal_replay_resume();
+ pg_wal_replay_resume 
+----------------------
+ 
+(1 row)
+
+postgres=# &#92;q
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;リカバリが終了したと言われます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;2021-08-12 12:20:58.839 JST [19994] LOG:  redo done at 0/E000080
+2021-08-12 12:20:58.839 JST [19994] LOG:  last completed transaction was at log time 2021-08-12 12:07:59.543321+09
+cp: cannot stat &#39;/home/jyuch/pgdata/11/walarch/00000002.history&#39;: No such file or directory
+2021-08-12 12:20:58.896 JST [19994] LOG:  selected new timeline ID: 2
+2021-08-12 12:20:59.145 JST [19994] LOG:  archive recovery complete
+cp: cannot stat &#39;/home/jyuch/pgdata/11/walarch/00000001.history&#39;: No such file or directory
+2021-08-12 12:20:59.392 JST [19993] LOG:  database system is ready to accept connections
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;データを確認すると、指定した時点までのデータがリストアされていることが確認出来ます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;psql -c &amp;quot;SELECT * FROM foo ORDER BY i DESC&amp;quot; test
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;             i              |          msg           
+----------------------------+------------------------
+ 2021-08-12 12:07:59.542937 | after pg_basebackup 5
+ 2021-08-12 12:06:59.533902 | after pg_basebackup 4
+ 2021-08-12 12:05:59.413026 | after pg_basebackup 3
+ 2021-08-12 12:04:59.395453 | after pg_basebackup 2
+ 2021-08-12 12:03:59.386102 | after pg_basebackup 1
+ 2021-08-12 12:02:57.576892 | before pg_basebackup 5
+ 2021-08-12 12:01:57.37541  | before pg_basebackup 4
+ 2021-08-12 12:00:57.161414 | before pg_basebackup 3
+ 2021-08-12 11:59:57.13221  | before pg_basebackup 2
+ 2021-08-12 11:58:57.119013 | before pg_basebackup 1
+(10 rows)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>PostgreSQLでもストリーミングレプリケーションを試してみたい</title>
+		<link href="https://www.jyuch.dev/posts/2021/pg-streaming-replication/"/>
+		<updated>2021-11-08T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2021/pg-streaming-replication/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;この記事では、Postgres標準機能であるストリーミングレプリケーションを用いて、複数のクラスタ間でデータを同期出来る事を確認します。&lt;/p&gt;
+&lt;p&gt;また、プライマリが障害を起こした際にスタンバイで業務を継続出来る事も確認します。&lt;/p&gt;
+&lt;h2&gt;諸元&lt;/h2&gt;
+&lt;p&gt;ここでは、以下の諸元を使用してデータベースを構築します。&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;ロール和名&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;ロール名&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;レプリケーションユーザ&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;repl_user&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;アプリケーションDB&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;test_app&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;アプリケーションDBユーザ&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;test_app&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2&gt;プライマリデータベースクラスタの初期化&lt;/h2&gt;
+&lt;p&gt;まず、プライマリのデータベースクラスタを初期化し起動します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;initdb --no-locale --encoding=UTF-8 -D /home/jyuch/pgdata/11/primary
+pg_ctl -D /home/jyuch/pgdata/11/primary start
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;プライマリクラスタにレプリケーションユーザを作成します。 また、あわせてテストユーザとデータベースを作成します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;psql -p 5432 postgres
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;postgres=# CREATE USER repl_user LOGIN REPLICATION PASSWORD &#39;repl_user&#39;;
+CREATE ROLE
+postgres=# CREATE USER test_app LOGIN PASSWORD &#39;test_app&#39;;
+CREATE ROLE
+postgres=# CREATE DATABASE test_app OWNER test_app;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;異なるホスト間でレプリケーションを行う場合はレプリケーション先からレプリケーションユーザが接続出来るよう&lt;code&gt;pg_hba.conf&lt;/code&gt;に設定を追加しますが、ローカルホスト間のレプリケーションは最初から許可されているためここでは設定を飛ばします。&lt;/p&gt;
+&lt;p&gt;テストデータベースに初期データを投入します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ psql -p 5432 -U test_app test_app
+
+psql (11.12)
+Type &amp;quot;help&amp;quot; for help.
+
+test_app=&amp;gt; CREATE TABLE foo (i int, v varchar(100));
+CREATE TABLE
+test_app=&amp;gt; INSERT INTO foo VALUES (1, &#39;hoge&#39;), (2, &#39;fuga&#39;);
+INSERT 0 2
+test_app=&amp;gt; select * from foo;
+ i |  v   
+---+------
+ 1 | hoge
+ 2 | fuga
+(2 rows)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;プライマリの&lt;code&gt;postgresql.conf&lt;/code&gt;を以下のように設定します。が、デフォルトで設定されているので大丈夫でしょう。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;wal_level = replica
+# 接続が急に切れたらコネクションがタイムアウトするまで残るので、必要数よりも少し大きめにする
+max_wal_senders = 10
+max_replication_slots = 10
+archive_mode = off
+hot_standby = on
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;設定が完了したら、一度プライマリを再起動します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pg_ctl -D /home/jyuch/pgdata/11/primary restart
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;スタンバイクラスタのベースコピー&lt;/h2&gt;
+&lt;p&gt;スタンバイクラスタ用に&lt;code&gt;pg_basebackup&lt;/code&gt;を使用してベースファイルのコピーを行います。&lt;/p&gt;
+&lt;p&gt;ここでは、レプリケーションスロットを新規で作成し、そのレプリケーションスロットを使用してベースバックアップを取得します。&lt;/p&gt;
+&lt;p&gt;レプリケーションスロットとは、プライマリ側で管理するスタンバイ側にどこまでのコミットが反映されたか管理するための機構です。
+スタンバイ側が停止している間にプライマリ側に変更が行われた場合、スタンバイに未反映のWALは削除されず、スタンバイが復帰してレプリケーションが完了したらWALを消してくれるように制御してくれます。&lt;/p&gt;
+&lt;p&gt;そのため、逆にいつまでもスタンバイが復帰しない場合だとプライマリ側のWALが溢れるので、復帰しないの分かっている場合はレプリケーションスロットを消しておいた方が良いでしょう。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pg_basebackup -h localhost -D /home/jyuch/pgdata/11/standby -X stream --progress -U repl_user -R --create-slot --slot=localhost_standby
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;本来であればこの後スタンバイ側の&lt;code&gt;recovery.conf&lt;/code&gt;を編集する必要があるのですが、なんか色々忖度して良い感じの設定を生成してくれているので、確認して良い感じだったらそのまま使います。&lt;/p&gt;
+&lt;p&gt;また、別サーバにスタンバイを立てているなら問題ありませんが、今回は同じサーバにスタンバイを立てている都合上スタンバイ側の待ち受けポートを&lt;code&gt;5433&lt;/code&gt;に変更します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;port = 5433
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;待ち受けポートを変更したら、スタンバイ側を起動します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pg_ctl -D /home/jyuch/pgdata/11/standby start
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;スタンバイとして起動すると、以下のメッセージが出力されます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;2021-08-10 15:59:45.519 JST [15881] LOG:  database system is ready to accept read only connections
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;プライマリとスタンバイの同期&lt;/h2&gt;
+&lt;p&gt;プライマリにデータを追加すると、スタンバイ側にも正常に伝搬していることが分かります。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ psql -p 5432 -U test_app -c &amp;quot;INSERT INTO foo VALUES (3, &#39;puipui&#39;)&amp;quot; test_app
+INSERT 0 1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ psql -p 5433 -U test_app -c &amp;quot;SELECT * FROM foo&amp;quot; test_app
+ i |   v    
+---+--------
+ 1 | hoge
+ 2 | fuga
+ 3 | puipui
+(3 rows)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;また、プライマリ側でレプリケーション状態を確認すると、&lt;code&gt;state&lt;/code&gt;が&lt;code&gt;streaming&lt;/code&gt;（レプリケーション中）になっていることが確認出来ます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ psql -x -p 5432 -c &amp;quot;SELECT * FROM pg_stat_replication&amp;quot; postgres
+-[ RECORD 1 ]----+------------------------------
+pid              | 15887
+usesysid         | 16384
+usename          | repl_user
+application_name | walreceiver
+client_addr      | 127.0.0.1
+client_hostname  | 
+client_port      | 41818
+backend_start    | 2021-08-10 15:59:45.529388+09
+backend_xmin     | 
+state            | streaming
+sent_lsn         | 0/3000320
+write_lsn        | 0/3000320
+flush_lsn        | 0/3000320
+replay_lsn       | 0/3000320
+write_lag        | 
+flush_lag        | 
+replay_lag       | 
+sync_priority    | 0
+sync_state       | async
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;レプリケーションに遅延が発生している場合は、以下のように表示されます。（異なるクラスタでの結果なので、色々表示が異なります。）&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;-[ RECORD 1 ]----+------------------------------
+pid              | 51409
+usesysid         | 10
+usename          | jyuch
+application_name | server1
+client_addr      | 127.0.0.1
+client_hostname  | 
+client_port      | 50836
+backend_start    | 2021-08-11 13:30:08.561606+09
+backend_xmin     | 
+state            | streaming
+sent_lsn         | 0/3D4F078
+write_lsn        | 0/3D4F078
+flush_lsn        | 0/3D4F078
+replay_lsn       | 0/3D4F078
+write_lag        | 00:00:00.000164 ← これ
+flush_lag        | 00:00:00.011684 ← これ
+replay_lag       | 00:00:00.011922 ← これ
+sync_priority    | 0
+sync_state       | async
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;また、スタンバイ側でマスタのどこまでを反映したかを表示すると、以下のような感じになります。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ psql -p 5433 -c &amp;quot;SELECT pg_last_xact_replay_timestamp()&amp;quot; postgres
+ pg_last_xact_replay_timestamp 
+-------------------------------
+ 2021-08-10 16:04:35.821323+09
+(1 row)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;スタンバイ側はリードオンリーで起動しているため、データへの変更は出来ません。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ psql -p 5433 -U test_app -c &amp;quot;INSERT INTO foo VALUES (4, &#39;standby&#39;)&amp;quot; test_app
+2021-08-10 16:37:29.526 JST [16558] ERROR:  cannot execute INSERT in a read-only transaction
+2021-08-10 16:37:29.526 JST [16558] STATEMENT:  INSERT INTO foo VALUES (4, &#39;standby&#39;)
+ERROR:  cannot execute INSERT in a read-only transaction
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;フェールオーバー&lt;/h2&gt;
+&lt;p&gt;フェールオーバーをテストするため、まずプライマリ側を停止させます。 &lt;code&gt;-m immediate&lt;/code&gt;を指定する事で疑似的にクラッシュを再現します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ pg_ctl stop -m immediate -D /home/jyuch/pgdata/11/primary
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;※プライマリを停止させた瞬間から、スタンバイ側のログにプライマリに接続できねーよとログが出続けます。&lt;/p&gt;
+&lt;p&gt;スタンバイ側は引き続き参照は出来ますが、更新は出来ません。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ psql -p 5433 -U test_app -c &amp;quot;SELECT * FROM foo&amp;quot; test_app
+ i |   v    
+---+--------
+ 1 | hoge
+ 2 | fuga
+ 3 | puipui
+(3 rows)
+
+$ psql -p 5433 -U test_app -c &amp;quot;INSERT INTO foo VALUES (4, &#39;standby&#39;)&amp;quot; test_app
+ERROR:  cannot execute INSERT in a read-only transaction
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;スタンバイをプライマリに昇格させるには、以下のコマンドを投入します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ pg_ctl -D /home/jyuch/pgdata/11/standby promote
+waiting for server to promote.... done
+server promoted
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;この状態であれば、新プライマリ（旧スタンバイ）から変更が出来るようになります。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ psql -p 5433 -U test_app -c &amp;quot;INSERT INTO foo VALUES (4, &#39;standby&#39;)&amp;quot; test_app
+INSERT 0 1
+
+$ psql -p 5433 -U test_app -c &amp;quot;SELECT * FROM foo&amp;quot; test_app
+ i |    v    
+---+---------
+ 1 | hoge
+ 2 | fuga
+ 3 | puipui
+ 4 | standby
+(4 rows)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;旧プライマリの復帰&lt;/h2&gt;
+&lt;p&gt;この状態から旧プライマリをスタンバイとして復帰させることも出来るっぽいですが、新プライマリにレプリケートされていないWALがある状態だと復帰出来ないらしいので、おとなしくクラスタを作り直してスタンバイとして追加した方が良さげです。&lt;/p&gt;
+&lt;p&gt;まぁこの辺は正直なんともかんともなので、本番環境でやる時は詳しい人に聞いた方が良いかもしれません。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pg_basebackup -h localhost -p 5433 -D /home/jyuch/pgdata/11/new-standby -X stream --progress -U repl_user -R --create-slot --slot=localhost_new_standby
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;port = 5434
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pg_ctl -D /home/jyuch/pgdata/11/new-standby start
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ psql -p 5434 -U test_app -c &amp;quot;SELECT * FROM foo&amp;quot; test_app
+ i |    v    
+---+---------
+ 1 | hoge
+ 2 | fuga
+ 3 | puipui
+ 4 | standby
+(4 rows)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;スタンバイ停止時のレプリケート&lt;/h2&gt;
+&lt;p&gt;スタンバイ側を停止させてもデータロストは発生せず、プライマリ側の変更はスタンバイが復帰したタイミングでレプリケートされることが確認出来ます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pg_ctl -D /home/jyuch/pgdata/11/new-standby stop
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ psql -p 5433 -U test_app -c &amp;quot;INSERT INTO foo VALUES (5, &#39;standby is offline&#39;)&amp;quot; test_app
+INSERT 0 1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ pg_ctl -D /home/jyuch/pgdata/11/new-standby start
+$ psql -p 5434 -U test_app -c &amp;quot;SELECT * FROM foo&amp;quot; test_app
+ i |         v          
+---+--------------------
+ 1 | hoge
+ 2 | fuga
+ 3 | puipui
+ 4 | standby
+ 5 | standby is offline
+(5 rows)
+&lt;/code&gt;&lt;/pre&gt;</content>
+	</entry>
+	<entry>
+		<title>WindowsでもPostgreSQLのチューニングをしたい</title>
+		<link href="https://www.jyuch.dev/posts/2021/pg-config-on-windows/"/>
+		<updated>2021-11-08T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2021/pg-config-on-windows/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;PostgreSQLをWindowsにインストールする際にどのパラメータをチューニングするのか良く忘れるのでそれについてです。&lt;/p&gt;
+&lt;p&gt;特にチューニング系のパラメータはそこそこ数が多く、どのパラメータがどこに影響するのかよく忘れるのでその辺ですね。&lt;/p&gt;
+&lt;h2&gt;検証に使用したプラットフォーム&lt;/h2&gt;
+&lt;p&gt;ここで述べる内容については、以下のプラットフォームで検証を行っています。
+使用するOSのバージョンもしくはPostgresのバージョンによっては使用できないパラメータがあるかもしれません。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Windows
+&lt;ul&gt;
+&lt;li&gt;Windows 10 2004（19041.264）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;Postgres
+&lt;ul&gt;
+&lt;li&gt;EDB社製ディストリビューション バージョン11.12&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;インストール時に注意すべきパラメータ&lt;/h2&gt;
+&lt;h3&gt;デフォルトロケール&lt;/h3&gt;
+&lt;p&gt;デフォルトでは、デフォルトロケールはインストーラを実行しているOSに設定されている値が使用されます。&lt;/p&gt;
+&lt;p&gt;しかし、ロケールとして&lt;code&gt;C&lt;/code&gt;以外を使用すると&lt;code&gt;C&lt;/code&gt;を設定している場合と比べて文字列のソートが遅くなる傾向があります。
+これは、&lt;code&gt;C&lt;/code&gt;の場合ではソート等に使用する照合順序として文字コードが使用されるのに対して、&lt;code&gt;C&lt;/code&gt;以外ではそれぞれのロケールの言語の辞書が使用されるためです。
+また、&lt;code&gt;C&lt;/code&gt;以外のロケールでは使用できない機能等も存在します。&lt;/p&gt;
+&lt;p&gt;そのため、デフォルトロケールとして&lt;code&gt;C&lt;/code&gt;を使用し、特定の言語向けの照合順序を使用する必要がある場合にはデータベース毎もしくはテーブル毎にロケールを設定するようにした方が良いでしょう。&lt;/p&gt;
+&lt;h3&gt;データディレクトリ&lt;/h3&gt;
+&lt;p&gt;インストーラのデフォルトでは、データディレクトリは&lt;code&gt;C:&#92;Program Files&#92;PostgreSQL&#92;data&lt;/code&gt;以下に作成されます。&lt;/p&gt;
+&lt;p&gt;しかし、Windows Vista・Server 2008以降のWindows
+OSでは&lt;code&gt;C:&#92;Program Files&lt;/code&gt;などの特定のディレクトリのセキュリティが強化され、編集する場合は管理者ユーザでもUACによる特権昇格が要求されるようになりました。
+また、&lt;code&gt;C:&#92;Program Files&lt;/code&gt;の用途としてこのディレクトリにはアプリケーションのみが配置される前提となっています。そのため、データディレクトリは別のディレクトリに配置する事をお勧めします。&lt;/p&gt;
+&lt;p&gt;個人的には&lt;code&gt;&amp;lt;ドライブレター&amp;gt;:&#92;pgdata&#92;&amp;lt;メジャーバージョン&amp;gt;&lt;/code&gt;（例：&lt;code&gt;C:&#92;pgdata&#92;11&lt;/code&gt;）のようなディレクトリパスに作成することをお勧めしています。
+Postgresはメジャーバージョン間で内部データの互換性が失われることがあります。そのため、新しいメジャーバージョンをインストールした際に同じルールでデータディレクトリを作成出来るようパスにメジャーバージョンを含めています。&lt;/p&gt;
+&lt;h2&gt;インストール後に設定すべきパラメータ&lt;/h2&gt;
+&lt;h3&gt;セキュリティ&lt;/h3&gt;
+&lt;table&gt;
+&lt;tr&gt;
+  &lt;th&gt;項目&lt;/th&gt;
+  &lt;th&gt;説明&lt;/th&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td&gt;listen_addresses&lt;/td&gt;
+  &lt;td&gt;
+  インストール直後の構成では、Postgresはローカルループバックに対してのみ接続を待ち受けます。
+  外部からの接続を受け付ける場合はこのパラメータを適切なIPアドレスもしくは&lt;code&gt;*&lt;/code&gt;に設定する必要があります。
+  &lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td&gt;password_encryption&lt;/td&gt;
+  &lt;td&gt;
+  &lt;p&gt;
+  PostgreSQLユーザのパスワードのハッシュアルゴリズムを指定します。
+  デフォルトの&lt;code&gt;md5&lt;/code&gt;は現在では安全な暗号学的ハッシュ関数とみなされていません。
+  そのため、クライアントがサポートしていないなどの場合を除いて&lt;code&gt;scram-sha-256&lt;/code&gt;を指定した方がより安全です。
+  &lt;/p&gt;
+  また、可能であれば&lt;code&gt;pg_hba.conf&lt;/code&gt;構成ファイルを使用して、特定のデータベースやユーザとして接続出来るIPアドレスを制限した方が良いでしょう。
+  &lt;/td&gt;
+&lt;/tr&gt;
+&lt;/table&gt;
+&lt;h3&gt;メモリ・ストレージ・WAL&lt;/h3&gt;
+&lt;p&gt;Postgresはインストール直後の設定ではメモリをあまり消費しないよう構成されています。
+そのため、大容量のメモリを積んでなおかつデータベース専用機として使用する場合はメモリをより積極的に使用できるよう設定を行う必要があります。&lt;/p&gt;
+&lt;p&gt;また、オンライントランザクションのようなレスポンスを気にするシステムと、データウェアハウスのようなスループットを気にするシステムではチューニングが異なります。
+そのため、どちらのワークロードがより実運用に近いかを意識する必要があります。&lt;/p&gt;
+&lt;table&gt;
+&lt;tr&gt;
+  &lt;th&gt;項目&lt;/th&gt;
+  &lt;th&gt;説明&lt;/th&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td&gt;shared_buffers&lt;/td&gt;
+  &lt;td&gt;
+  読み込み及び書き込みに使用するための共有バッファのメモリ量を指定します。
+  Postgresで使用可能なメモリの25%が妥当と言われています。また、PostgresはOSのファイルキャッシュにも依存しているため、やみくもに大きくすると逆効果となります。
+  &lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td&gt;effective_cache_size&lt;/td&gt;
+  &lt;td&gt;
+  プランナがクエリプランを生成する際に参考とするOSのファイルキャッシュの大きさを指定します。
+  実際にこのサイズのメモリを消費するわけではありません。
+  Windowsであれば、SuperFetch君が使えるメモリ量を指定すれば大丈夫っぽいです。
+  &lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td&gt;work_mem&lt;/td&gt;
+  &lt;td&gt;
+  &lt;p&gt;
+  ソートなどのクエリ操作中に使用可能な最大メモリ量を指定します。
+  このサイズを超える場合は一時ファイルに書き出されるようになります。
+  &lt;/p&gt;
+  &lt;p&gt;
+  ネット上の記事では1つのセッションでの最大メモリ量と解説されることがありますが、それは誤りです。
+  1つのセッションでクエリ操作がパラレル実行される場合、それぞれのクエリ操作で&lt;code&gt;work_mem&lt;/code&gt;だけ使用されます。
+  そのため使用されるメモリ量は同時実行数に乗じられます。
+  &lt;/p&gt;
+  &lt;p&gt;
+  極端に大きな値を設定した場合、同時コネクション数によっては使用できるメモリが枯渇する事になります。
+  逆に小さすぎる場合、小さなデータセットのソートでも一時ディスクにデータを書き込むようになるため動作が遅くなります。以下の式をベースに調整するのが良いでしょう。
+  &lt;/P&gt;
+  &lt;code&gt;（PostgreSQLで使用可能なメモリ － 共有バッファ）÷ 最大コネクション数&lt;/code&gt;
+  &lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td&gt;maintenance_work_mem&lt;/td&gt;
+  &lt;td&gt;
+  バキュームなどの保守操作で使用される最大メモリ量を指定します。
+  このメモリ量を増やすことでダンプからのリストアが高速に処理されるようになります。
+  データウェアハウスなどの大量のデータの入れ替えが発生するシステムでは多めに設定した方が良いでしょう。
+  &lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td&gt;min_wal_size&lt;/td&gt;
+  &lt;td&gt;
+  ディスク上に保持するWALの最小サイズを指定します。
+  WALファイルはデータ正常にディスクに書き込まれた後に再利用するため、常にこのパラメータで指定しているサイズは保持されます。
+  &lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td&gt;max_wal_size&lt;/td&gt;
+  &lt;td&gt;
+  &lt;p&gt;
+  WALがこのサイズを超えた場合、チェックポイント間隔以下でもチェックポイントが実行されます。
+  この値はソフトリミットで、ディスクの負荷状況によってはWALがこのサイズを上回る可能性があります。
+  &lt;/p&gt;
+  チェックポイントは非常にI/Oコストが大きい処理です。
+  そのため、データウェアハウスのような大量のデータを一度に流し込むような用途ではこのパラメータを十分に大きくします。
+  &lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td&gt;checkpoint_timeout&lt;/td&gt;
+  &lt;td&gt;
+  &lt;p&gt;
+  自動チェックポイントを発動させる間隔を指定します。この設定値が小さいと頻繁にチェックポイントが走るようになるため書き込みの性能が劣化します。
+  &lt;/p&gt;
+  &lt;p&gt;
+  一般的には&lt;code&gt;30min&lt;/code&gt;以上を設定します。
+  &lt;/p&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td&gt;checkpoint_completion_target&lt;/td&gt;
+  &lt;td&gt;
+  &lt;p&gt;
+  あるチェックポイントまでに完了したトランザクションデータは次のチェックポイントまでの間で均等にならされてディスクに書き込まれます。
+  これは、チェックポイント直後のI/O処理のバーストを防ぐための措置です。
+  &lt;/p&gt;
+  その書き込みの際に、チェックポイント間隔のどのくらいの割合でならしながら書き込むかを指定します。
+  &lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td&gt;wal_buffers&lt;/td&gt;
+  &lt;td&gt;
+  WALレコードをディスクに書き込む際のバッファ量を指定します。
+  &lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td&gt;random_page_cost&lt;/td&gt;
+  &lt;td&gt;
+  プランナに対して使用しているディスク装置のランダムにアクセスする際のコストを指定するものです。
+  HDDであれば&lt;code&gt;4.0&lt;/code&gt;、SSDであれば&lt;code&gt;1.1&lt;/code&gt;を指定します。
+  根拠はよく分かりません。
+  &lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td&gt;max_worker_processes&lt;/td&gt;
+  &lt;td&gt;
+  バックグラウンドワーカープロセスの最大数を指定します。
+  データベース専用機であれば一般的にコア当たりのスレッド数×コア数×ソケット数を指定します。
+  &lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td&gt;max_parallel_workers_per_gather&lt;/td&gt;
+  &lt;td&gt;
+  結合処理の際に並列で稼働させる最大のワーカー数を指定します。
+  ワーカープロセスは&lt;code&gt;max_worker_processes&lt;/code&gt;で指定したワーカープールから取り出されて使用されるため、&lt;code&gt;max_worker_processes&lt;/code&gt;以上に指定しても意味がありません。
+  &lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td&gt;max_parallel_workers&lt;/td&gt;
+  &lt;td&gt;
+  パラレルクエリ操作用に使用されるワーカーの最大数を指定します。
+  大体は&lt;code&gt;max_worker_processes&lt;/code&gt;と同じです。
+  &lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td&gt;max_parallel_maintenance_workers&lt;/td&gt;
+  &lt;td&gt;
+  ユーティリティコマンドで使用できる最大のワーカー数を設定します。
+  が、パラレルワーカーを使えるユーティリティコマンドは&lt;code&gt;CREATE INDEX&lt;/code&gt;位なので、まぁ、その
+  &lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td&gt;default_statistics_target&lt;/td&gt;
+  &lt;td&gt;
+  &lt;p&gt;
+  デフォルトの統計対象を指定します。
+  大きな値を設定すると、ANALYZEに時間が掛かるようになりますが、よりプランナの予測品質が向上します。
+  &lt;/p&gt;
+  DWHのような読み取り主体のワークロードであれば、デフォルト値よりも大きくしても良いかもしれません。
+  &lt;/td&gt;
+&lt;/tr&gt;
+&lt;/table&gt;
+&lt;h2&gt;設定例&lt;/h2&gt;
+&lt;p&gt;このセクションでは、以下のハードウェアとワークロード傾向におけるチューニング例と、ベンチマーク結果について提示します。&lt;/p&gt;
+&lt;h3&gt;ハードウェアとワークロード傾向&lt;/h3&gt;
+&lt;p&gt;今回想定するハードウェアは以下の通りとなります。
+また、今回のワークロードは読み取りが主体かつ、複雑なクエリを実行する事が予想されるためDWH寄りの傾向を想定しています。&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;項目&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;値&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;OS&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Windows 10 2004（19041.264）&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Postgres&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;EDB社製ディストリビューション バージョン11.12&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;CPU&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Intel(R) Core(TM) i3-6100U CPU @ 2.30GB&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;メモリ&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;8.0GB&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;ストレージ&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;SSD 128GB&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;ワークロード傾向&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;DWH&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h3&gt;チューニングパラメータ一覧&lt;/h3&gt;
+&lt;p&gt;今回は以下のチューニングを行っています。&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;項目&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;値&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;備考&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;listen_addresses&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;*&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;port&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;5432&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;password_encryption&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;scram-sha-256&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;shared_buffers&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2GB&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;物理メモリの1/4。&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;work_mem&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;31MB&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;maintenance_work_mem&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;768MB&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;ワークロードがDWH寄りなので多めにする。&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;max_worker_processes&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2コアなので。&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;max_parallel_maintenance_workers&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;1&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;max_parallel_workers_per_gather&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;1&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;max_parallel_workers&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;wal_buffers&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;16MB&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;shared_buffers&lt;/code&gt;を増やしているので合わせて増やす。&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;max_wal_size&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;6GB&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;ワークロードがDWH寄りなので多めにする。&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;min_wal_size&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2GB&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;checkpoint_completion_target&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;0.9&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;random_page_cost&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;1.1&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;SSDなので。&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;effective_cache_size&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;4GB&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;default_statistics_target&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;500&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;DWHなので、アナライズに時間を掛けてもトータルのクエリコストがペイ出来るため増やす。&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h3&gt;ベンチマーク&lt;/h3&gt;
+&lt;p&gt;ワークロードはDWH寄りなので、それに応じたベンチマーク規格としてTPC-Hを実施します。&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;条件&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;値&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;スケールファクタ&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;1&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;同時接続数&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;1&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;また、ベンチマークツールとしてHammerDBのバージョン4.2を使用しています。&lt;/p&gt;
+&lt;p&gt;条件を変えてテストした訳ではないため厳密性には欠けますが、デフォルト値とチューニング済みでは以下の差異が見られました。&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;デフォルト設定&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2.1秒/クエリ（各クエリの平均値）&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;チューニング済み&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;1.1秒/クエリ（各クエリの平均値）&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+</feed>
