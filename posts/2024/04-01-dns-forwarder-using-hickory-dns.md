@@ -311,3 +311,27 @@ jyuch.github.io.        3600    IN      A       185.199.110.153
 ```
 
 おわり
+
+# 追記
+
+リクエストヘッダをそのままレスポンスヘッダとして打ち返していましたが、そうするとsystemd-resolvedが受け取り拒否します。
+Windowsはあんまり気にしていないみたいですけど。
+
+正しくは以下の感じですね。
+
+```rust
+let response_header = Header::response_from_request(request.header());
+let response_builder = MessageResponseBuilder::from_message_request(request);
+let response = response_builder.build(
+    response_header,
+    dns_response.as_ref().map(|it| it.answers()).unwrap_or(&[]),
+    &[],
+    &[],
+    &[],
+```
+
+digの結果の一行目に警告が載ってましたね・・・
+
+```sh
+;; Warning: query response not set
+```
