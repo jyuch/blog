@@ -336,7 +336,7 @@ digの結果の一行目に警告が載ってましたね・・・
 
 # 追記その２
 
-単純に`Header::response_from_request`するとレスポンスヘッダに再起フラグが立たないので、上位DNSからのレスポンスヘッダに再起フラグが立っていたら建ててあげる必要があるようです。
+単純に`Header::response_from_request`するとレスポンスヘッダに再起フラグが立たないので、上位DNSからのレスポンスヘッダに再起フラグが立っていたら立ててあげる必要があるようです。
 
 ```rust
 let mut response_header = Header::response_from_request(request.header());
