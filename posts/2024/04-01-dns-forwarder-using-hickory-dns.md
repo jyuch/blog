@@ -2,7 +2,7 @@
 title: RustでもHickory DNSを使ってDNS Forwarderを実装したい
 description: RustからHickory DNSを使用してDNS Forwarderを実装する方法を確認します
 date: 2024-04-01
-lastModified: 2024-04-01
+lastModified: 2024-06-03
 tags: 
   - rust
   - dns
@@ -330,7 +330,7 @@ let response = response_builder.build(
 
 digの結果の一行目に警告が載ってましたね・・・
 
-```
+```text
 ;; Warning: query response not set
 ```
 
@@ -345,7 +345,7 @@ response_header.set_recursion_available(response.recursion_available());
 
 でないとこんな警告がでます。というか出てましたね。ちゃんと読めよ
 
-```
+```text
 ;; WARNING: recursion requested but not available
 ```
 
