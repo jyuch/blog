@@ -310,9 +310,7 @@ jyuch.github.io.        3600    IN      A       185.199.110.153
 ;; MSG SIZE  rcvd: 124
 ```
 
-おわり
-
-# 追記
+# 追記その１
 
 リクエストヘッダをそのままレスポンスヘッダとして打ち返していましたが、そうするとsystemd-resolvedが受け取り拒否します。
 Windowsはあんまり気にしていないみたいですけど。
@@ -332,6 +330,23 @@ let response = response_builder.build(
 
 digの結果の一行目に警告が載ってましたね・・・
 
-```sh
+```
 ;; Warning: query response not set
 ```
+
+# 追記その２
+
+単純に`Header::response_from_request`するとレスポンスヘッダに再起フラグが立たないので、上位DNSからのレスポンスヘッダに再起フラグが立っていたら建ててあげる必要があるようです。
+
+```rust
+let mut response_header = Header::response_from_request(request.header());
+response_header.set_recursion_available(response.recursion_available());
+```
+
+でないとこんな警告がでます。というか出てましたね。ちゃんと読めよ
+
+```
+;; WARNING: recursion requested but not available
+```
+
+おわり
