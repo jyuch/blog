@@ -22,7 +22,7 @@
     background: #fafafa;
   }
 
-  p > code {
+  p > code, table > tbody > tr > td > code, ul > li > code {
     padding: 0 0.25em;
   }
 
