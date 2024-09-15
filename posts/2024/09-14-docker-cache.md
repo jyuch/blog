@@ -5,9 +5,6 @@ date: 2024-09-14
 lastModified: 2024-09-14
 tags: 
   - docker
-  - linux
-  - rust
-  - python
 ---
 
 # はじめに
@@ -17,14 +14,19 @@ tags:
 # Buildx
 
 どうも最近のDockerはMoby BuildKitを`docker`コマンドから透過的に扱えるようになったようです。
-
-そのBuildKitをDockerから使うための拡張がBuildxのようです。
+そして、BuildKitをDockerから使うための拡張がBuildxです。
 
 BuildKit君はいい感じにキャッシュを扱えるようなので、その辺を確認してみましょう。
 
-# apt
+# パッケージマネージャ
 
-昔は`apt-get`コマンドを鬼のように`&&`で連結して、最後に`rm -rf /var/lib/apt/lists/*`でキャッシュファイルを消し飛ばしてイメージをコンパクションしていましたが、最近は違うようです。
+## APT
+
+昔は`apt-get`コマンドを鬼のように`&&`で連結して、最後に`rm -rf /var/lib/apt/lists/*`でキャッシュファイルを消し飛ばしてイメージをコンパクションするのがノウハウでした。
+
+そうすると、イメージサイズは小さくなりますが毎回パッケージをダウンロードしてくることになるので、ビルド時間が伸びるという欠点がありました。
+
+BuildKitは特定のディレクトリをキャッシュとしてマウントすることで、イメージの再ビルド時にそのディレクトリを復元することができます。
 
 ```Dockerfile
 FROM debian:bookworm
@@ -45,23 +47,51 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 こうすることで2回目以降は普通の`apt`のようにパッケージキャッシュを使ってくれるようです。
 
 ところで、初段のステージで`/etc/apt/apt.conf.d/docker-clean`を消し去ってますね。
-中身が気になったので確認してみました。
 
-> Dockerだとキャッシュが刺さってイメージが肥大化するから`apt`の最後にキャッシュを消し飛ばすようにしといたからね
+Dockerだとキャッシュが刺さってイメージが肥大化するから`apt`の最後にキャッシュを消し飛ばすようにしている設定ファイルのようです。
 
-だそうです。
+じゃあ何すか
 
-原文が読みたかったら
+`rm -rf /var/lib/apt/lists/*`は無駄だったって事すか
 
-```bash
-docker run -it --rm debian:bookworm cat /etc/apt/apt.conf.d/docker-clean
+## DNF
+
+DNF君も基本的には同じです。
+
+Amazon Linux 2023のベースイメージではダウンロードキャッシュをしないようにしていたので、ダウンロードキャッシュをする設定を挟んでから`dnf install`します。
+
+```Dockerfile
+FROM amazonlinux:2023
+
+RUN echo "keepcache=True" >> /etc/dnf/dnf.conf
+
+RUN --mount=type=cache,target=/var/cache/dnf \
+    --mount=type=cache,target=/var/lib/dnf \
+    dnf install -y \
+      gcc gcr lvm2 clang
 ```
 
-で読めるので、こちらからどうぞ
+## YUM
 
-# Rust
+CentOS7がEoLを迎えてもう`yum`コマンドを打つ機会はない。そんなふうに考えていた時期が俺にもありました
 
-次はビルド激重Rust君です。
+AWS Lambdaの（少なくともPython）のベースイメージがAmazon Linuxが2なんですよね。
+
+```Dockerfile
+FROM amazonlinux:2
+
+RUN sed -i -e 's/keepcache=0/keepcache=1/' /etc/yum.conf
+
+RUN --mount=type=cache,target=/var/cache/yum \
+    yum install -y \
+      gcc gcr lvm2 clang
+```
+
+# ビルドシステム
+
+## Rust
+
+ビルド激重Rust君です。
 
 ```Dockerfile
 FROM rust:1.81.0-slim AS build
@@ -89,9 +119,9 @@ ENTRYPOINT ["/bin/hello_rust"]
 
 あとはいつものように最終的なイメージをビルドしているステージに成果物を送り込めば完了です。
 
-# Python
+## Python
 
-最近触っているのでまぁ一応Pythonにも触れておきます。
+最近触っているのでまぁ一応Pythonも確認してみましょう。
 
 ```Dockerfile
 FROM python:3.12-bookworm
@@ -106,7 +136,5 @@ CMD ["python", "main.py"]
 ```
 
 Rustと同じようにパッケージマネージャのキャッシュをそのまま`cache`でマウントするだけです。
-
-そもそも素の`python:3.12-bookworm`が1GBある時点でまぁ、その、ねぇ・・・
 
 おわり
