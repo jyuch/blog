@@ -75,7 +75,7 @@ RUN --mount=type=cache,target=/var/cache/dnf \
 
 CentOS7がEoLを迎えてもう`yum`コマンドを打つ機会はない。そんなふうに考えていた時期が俺にもありました
 
-AWS Lambdaの（少なくともPython）のベースイメージがAmazon Linuxが2なんですよね。
+AWS Lambdaの（少なくともPythonの）ベースイメージがAmazon Linuxが2なんですよね。
 
 ```Dockerfile
 FROM amazonlinux:2

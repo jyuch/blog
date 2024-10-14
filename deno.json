@@ -14,5 +14,10 @@
     "options": {
       "proseWrap": "preserve"
     }
+  },
+  "compilerOptions": {
+    "types": [
+      "lume/types.ts"
+    ]
   }
 }
