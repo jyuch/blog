@@ -1,0 +1,1047 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<feed xmlns="http://www.w3.org/2005/Atom">
+	<title>レンコン畑でつかまえて</title>
+	<subtitle></subtitle>
+	<link href="https://www.jyuch.dev/feed.xml" rel="self"/>
+	<link href="https://www.jyuch.dev/"/>
+	
+	<updated>2024-11-17T11:33:47Z</updated>
+	<id>https://www.jyuch.dev/</id>
+	<author>
+		<name>jyuch</name>
+		<email></email>
+	</author>
+	<entry>
+		<title>Docker Buildxでもキャッシュしたい</title>
+		<link href="https://www.jyuch.dev/posts/2024/09-14-docker-cache/"/>
+		<updated>2024-09-14T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2024/09-14-docker-cache/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;しばらくぶりにDockerに触ったらなんかいろいろとキャッシュ周りが変わっていたのでそれについてです。&lt;/p&gt;
+&lt;h1&gt;Buildx&lt;/h1&gt;
+&lt;p&gt;どうも最近のDockerはMoby BuildKitを&lt;code&gt;docker&lt;/code&gt;コマンドから透過的に扱えるようになったようです。
+そして、BuildKitをDockerから使うための拡張がBuildxです。&lt;/p&gt;
+&lt;p&gt;BuildKit君はいい感じにキャッシュを扱えるようなので、その辺を確認してみましょう。&lt;/p&gt;
+&lt;h1&gt;パッケージマネージャ&lt;/h1&gt;
+&lt;h2&gt;APT&lt;/h2&gt;
+&lt;p&gt;昔は&lt;code&gt;apt-get&lt;/code&gt;コマンドを鬼のように&lt;code&gt;&amp;amp;&amp;amp;&lt;/code&gt;で連結して、最後に&lt;code&gt;rm -rf /var/lib/apt/lists/*&lt;/code&gt;でキャッシュファイルを消し飛ばしてイメージをコンパクションするのがノウハウでした。&lt;/p&gt;
+&lt;p&gt;そうすると、イメージサイズは小さくなりますが毎回パッケージをダウンロードしてくることになるので、ビルド時間が伸びるという欠点がありました。&lt;/p&gt;
+&lt;p&gt;BuildKitは特定のディレクトリをキャッシュとしてマウントすることで、イメージの再ビルド時にそのディレクトリを復元することができます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-Dockerfile&quot;&gt;FROM debian:bookworm
+
+RUN rm -f /etc/apt/apt.conf.d/docker-clean; &#92;
+    echo &#39;Binary::apt::APT::Keep-Downloaded-Packages &amp;quot;true&amp;quot;;&#39; &#92;
+      &amp;gt; /etc/apt/apt.conf.d/keep-cache
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked &#92;
+    --mount=type=cache,target=/var/lib/apt,sharing=locked &#92;
+    set -eux; &#92;
+    apt-get update; &#92;
+    apt-get install -y --no-install-recommends &#92;
+      sl;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;apt-get&lt;/code&gt;のタイミングでリポジトリキャッシュを&lt;code&gt;cache&lt;/code&gt;タイプでマウントしています。
+こうすることで2回目以降は普通の&lt;code&gt;apt&lt;/code&gt;のようにパッケージキャッシュを使ってくれるようです。&lt;/p&gt;
+&lt;p&gt;ところで、初段のステージで&lt;code&gt;/etc/apt/apt.conf.d/docker-clean&lt;/code&gt;を消し去ってますね。&lt;/p&gt;
+&lt;p&gt;Dockerだとキャッシュが刺さってイメージが肥大化するから&lt;code&gt;apt&lt;/code&gt;の最後にキャッシュを消し飛ばすようにしている設定ファイルのようです。&lt;/p&gt;
+&lt;p&gt;じゃあ何すか&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;rm -rf /var/lib/apt/lists/*&lt;/code&gt;は無駄だったって事すか&lt;/p&gt;
+&lt;h2&gt;DNF&lt;/h2&gt;
+&lt;p&gt;DNF君も基本的には同じです。&lt;/p&gt;
+&lt;p&gt;Amazon Linux 2023のベースイメージではダウンロードキャッシュをしないようにしていたので、ダウンロードキャッシュをする設定を挟んでから&lt;code&gt;dnf install&lt;/code&gt;します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-Dockerfile&quot;&gt;FROM amazonlinux:2023
+
+RUN echo &amp;quot;keepcache=True&amp;quot; &amp;gt;&amp;gt; /etc/dnf/dnf.conf
+
+RUN --mount=type=cache,target=/var/cache/dnf &#92;
+    --mount=type=cache,target=/var/lib/dnf &#92;
+    dnf install -y &#92;
+      gcc gcr lvm2 clang
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;YUM&lt;/h2&gt;
+&lt;p&gt;CentOS7がEoLを迎えてもう&lt;code&gt;yum&lt;/code&gt;コマンドを打つ機会はない。そんなふうに考えていた時期が俺にもありました&lt;/p&gt;
+&lt;p&gt;AWS Lambdaの（少なくともPythonの）ベースイメージがAmazon Linuxが2なんですよね。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-Dockerfile&quot;&gt;FROM amazonlinux:2
+
+RUN sed -i -e &#39;s/keepcache=0/keepcache=1/&#39; /etc/yum.conf
+
+RUN --mount=type=cache,target=/var/cache/yum &#92;
+    yum install -y &#92;
+      gcc gcr lvm2 clang
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h1&gt;ビルドシステム&lt;/h1&gt;
+&lt;h2&gt;Rust&lt;/h2&gt;
+&lt;p&gt;ビルド激重Rust君です。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-Dockerfile&quot;&gt;FROM rust:1.81.0-slim AS build
+
+WORKDIR /app
+
+RUN --mount=type=bind,source=src,target=src &#92;
+    --mount=type=bind,source=Cargo.toml,target=Cargo.toml &#92;
+    --mount=type=bind,source=Cargo.lock,target=Cargo.lock &#92;
+    --mount=type=cache,target=/app/target/ &#92;
+    --mount=type=cache,target=/usr/local/cargo/git/db &#92;
+    --mount=type=cache,target=/usr/local/cargo/registry &#92;
+    set -eux; &#92;
+    cargo build --locked --release; &#92;
+    cp ./target/release/hello_rust /bin/hello_rust
+
+FROM debian:stable-slim AS final
+COPY --from=build /bin/hello_rust /bin/hello_rust
+ENTRYPOINT [&amp;quot;/bin/hello_rust&amp;quot;]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;ソース類は&lt;code&gt;bind&lt;/code&gt;でマウントしてしまえばそもそもビルドステージへの転送すら不要なようです。&lt;/p&gt;
+&lt;p&gt;あとはcargoのパッケージキャッシュとビルドキャッシュを&lt;code&gt;cache&lt;/code&gt;でバインドすれば余計なパッケージの再取得やリビルドが走りません。&lt;/p&gt;
+&lt;p&gt;あとはいつものように最終的なイメージをビルドしているステージに成果物を送り込めば完了です。&lt;/p&gt;
+&lt;h2&gt;Python&lt;/h2&gt;
+&lt;p&gt;最近触っているのでまぁ一応Pythonも確認してみましょう。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-Dockerfile&quot;&gt;FROM python:3.12-bookworm
+
+RUN --mount=type=bind,source=requirements.txt,target=requirements.txt &#92;
+    --mount=type=cache,target=/root/.cache/pip &#92;
+    pip install -r requirements.txt
+
+COPY main.py .
+
+CMD [&amp;quot;python&amp;quot;, &amp;quot;main.py&amp;quot;]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Rustと同じようにパッケージマネージャのキャッシュをそのまま&lt;code&gt;cache&lt;/code&gt;でマウントするだけです。&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>Windowsでもpyenvを使いたい</title>
+		<link href="https://www.jyuch.dev/posts/2024/07-09-pyenv/"/>
+		<updated>2024-07-09T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2024/07-09-pyenv/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;Pythonの特定のバージョンをグローバルに影響させたくないのでpyenv-winを使っているのですが、セットアップをよく忘れるのでそれについてです。&lt;/p&gt;
+&lt;h1&gt;初回セットアップ&lt;/h1&gt;
+&lt;p&gt;pyenv-winをホームディレクトリにクローンします。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;git clone git@github.com:pyenv-win/pyenv-win.git .pyenv
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;そうしたら以下の環境変数を設定します。&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;環境変数&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;値&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;PYENV&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;%USERPROFILE%&#92;.pyenv&#92;pyenv-win&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;PYENV_HOME&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;%USERPROFILE%&#92;.pyenv&#92;pyenv-win&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;PYENV_ROOT&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;%USERPROFILE%&#92;.pyenv&#92;pyenv-win&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;また、以下の2つを&lt;code&gt;PAHT&lt;/code&gt;に追加します。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;%USERPROFILE%&#92;.pyenv&#92;pyenv-win&#92;bin&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;%USERPROFILE%&#92;.pyenv&#92;pyenv-win&#92;shims&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;また、「設定 &amp;gt; アプリ &amp;gt; アプリの詳細設定 &amp;gt; アプリ実行エイリアス」から&lt;code&gt;python.exe&lt;/code&gt;と&lt;code&gt;python3.exe&lt;/code&gt;をオフにします。&lt;/p&gt;
+&lt;p&gt;アプリ実行エイリアス君は再起動しないと効かないっぽいのでいったん再起動します。&lt;/p&gt;
+&lt;h1&gt;Pythonランタイムのインストール&lt;/h1&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pyenv install --list
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;でインストール可能なPythonバージョンを表示させ、&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pyenv install 3.11.9
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;でインストールします。&lt;/p&gt;
+&lt;h1&gt;ローカルフォルダのセットアップ&lt;/h1&gt;
+&lt;p&gt;ローカルフォルダで使うPythonのバージョンをセットアップします。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pyenv local 3.11.9
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;そうしたらvenv環境を作成します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;python -m venv .venv
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;venv環境を有効にします。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;.&#92;.venv&#92;Scripts&#92;Activate.ps1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;いったんpipを最新版に更新します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;python -m pip install --upgrade pip
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h1&gt;パッケージのインストール&lt;/h1&gt;
+&lt;p&gt;パッケージのインストール。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pip install polars
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;インストール済みのパッケージを出力。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pip freeze &amp;gt; requirements.txt
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;requirements.txt&lt;/code&gt;ファイルからインストール。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pip install -r requirements.txt
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;一括アンインストール。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;python -m pip uninstall -y -r .&#92;requirements.txt
+&lt;/code&gt;&lt;/pre&gt;</content>
+	</entry>
+	<entry>
+		<title>RustでもDNSベースのアドブロッカーを実装したい</title>
+		<link href="https://www.jyuch.dev/posts/2024/06-03-advoid-dns-based-ad-blocker/"/>
+		<updated>2024-06-03T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2024/06-03-advoid-dns-based-ad-blocker/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;最近は履歴に介入したり勝手に全画面表示してくるｱﾚなWeb広告が増えてきましたよね。&lt;/p&gt;
+&lt;p&gt;というのは特に関係なく、なんとなく手持ちの知識で作れそうなのでアドブロッカーを自作しました。&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/jyuch/advoid&quot;&gt;advoid - DNS based AD blocker&lt;/a&gt;&lt;/p&gt;
+&lt;h1&gt;動作原理&lt;/h1&gt;
+&lt;p&gt;基本的な原理はフルリゾルバのクライアントの間に挟まり、広告を配信しているドメインのクエリをインターセプトして&lt;code&gt;NXDOMAIN&lt;/code&gt;を返すというよくあるものです。
+ですので、基本的には配下の端末全体で広告をブロック出来るようになります。&lt;/p&gt;
+&lt;p&gt;あくまでも上位のフルリゾルバへのクエリをフィルタリングしているだけなので、advoid自体にはキャッシュは持っていません。&lt;/p&gt;
+&lt;p&gt;また、正規の実装であれば&lt;code&gt;NXDOMAIN&lt;/code&gt;を返すときはネガティブキャッシュをさせるためにSOAレコードも返すべきです。
+しかし、フィルタリング自体はadvoidの内部で行っており、ブロック対象のレコードに対してはμsオーダーでレスポンスを返せているためわざわざSOAを上位のフルリゾルバに問い合わせるよりも空で返したほうが速いと思って返していません。&lt;/p&gt;
+&lt;h1&gt;実装コンセプト&lt;/h1&gt;
+&lt;p&gt;手軽に使えるようにバイナリのポン置きとブロックするドメインの定義ファイルだけで動作するようになっています。&lt;/p&gt;
+&lt;p&gt;実装には最近お気に入りのRustを使用しており、クエリの待ち受けやフルリゾルバへクエリをフォワーディングするのには&lt;a href=&quot;https://github.com/hickory-dns/hickory-dns&quot;&gt;hickory-dns&lt;/a&gt;を利用しています。&lt;/p&gt;
+&lt;p&gt;また、どれだけのリクエストを受け取ってどれだけブロックしたか確認できるようにPrometheusのexporterを生やしています。
+まぁ、カウンタは今のところ3つしかありませんが。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-text&quot;&gt;# TYPE dns_requests_total counter
+dns_requests_total 4149
+
+# TYPE dns_requests_block counter
+dns_requests_block 3583
+
+# TYPE dns_requests_forward counter
+dns_requests_forward 566
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;また、デバッグしているときに欲しかったのでOpenTelemetryでテレメトリを採れるようにしてあります。Jaegerとセットでどうぞ&lt;/p&gt;
+&lt;h1&gt;おわりに&lt;/h1&gt;
+&lt;p&gt;とりあえず単純なフォワーディングとフィルタリングは出来るようになったのですが、TCPフォールバックとかActive Directory配下のDynamic DNSの透過とかはまだなので追い追い実装していきます。&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>RustでもHickory DNSを使ってDNS Forwarderを実装したい</title>
+		<link href="https://www.jyuch.dev/posts/2024/04-01-dns-forwarder-using-hickory-dns/"/>
+		<updated>2024-04-01T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2024/04-01-dns-forwarder-using-hickory-dns/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;DNSは春の季語なので、&lt;a href=&quot;https://github.com/hickory-dns/hickory-dns&quot;&gt;Hickory DNS&lt;/a&gt;を使用してDNS Forwarderを実装する方法を確認してみました。&lt;/p&gt;
+&lt;p&gt;とにかくドキュメントの整備が追い付いていないので、困ったらソースコードを読みましょう。これがオープンソースの強みですね（）&lt;/p&gt;
+&lt;h1&gt;とりあえず適当な値を返す&lt;/h1&gt;
+&lt;p&gt;Hickory DNSでのサーバ実装は&lt;code&gt;hickory_server&lt;/code&gt;クレートで実装されています。&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;hickory_server&lt;/code&gt;でのアクセスの受付は&lt;code&gt;ServerFuture&lt;/code&gt;に実装されています。
+&lt;code&gt;ServerFuture::new&lt;/code&gt;で&lt;code&gt;RequestHandler&lt;/code&gt;トレイトを受け取るので、このトレイトを実装すればとりあえずなんらかの値は返せそうです。&lt;/p&gt;
+&lt;p&gt;と思って&lt;a href=&quot;https://docs.rs/hickory-server/latest/hickory_server/server/trait.RequestHandler.html&quot;&gt;docs.rsで当該トレイトのドキュメント&lt;/a&gt;を見ると、面妖なシグネチャが現れます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;pub trait RequestHandler: Send + Sync + Unpin + &#39;static {
+    // Required method
+    fn handle_request&amp;lt;&#39;life0, &#39;life1, &#39;async_trait, R&amp;gt;(
+        &amp;amp;&#39;life0 self,
+        request: &amp;amp;&#39;life1 Request,
+        response_handle: R
+    ) -&amp;gt; Pin&amp;lt;Box&amp;lt;dyn Future&amp;lt;Output = ResponseInfo&amp;gt; + Send + &#39;async_trait&amp;gt;&amp;gt;
+       where R: &#39;async_trait + ResponseHandler,
+             Self: &#39;async_trait,
+             &#39;life0: &#39;async_trait,
+             &#39;life1: &#39;async_trait;
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;まぁ、この手のシグネチャは大体&lt;code&gt;#[async_trait::async_trait]&lt;/code&gt;で生成されているパターンが多いので、落ち着いて実装を覗いてみると以下の感じになってます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;/// Trait for handling incoming requests, and providing a message response.
+#[async_trait::async_trait]
+pub trait RequestHandler: Send + Sync + Unpin + &#39;static {
+    /// Determines what needs to happen given the type of request, i.e. Query or Update.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - the requested action to perform.
+    /// * `response_handle` - handle to which a return message should be sent
+    async fn handle_request&amp;lt;R: ResponseHandler&amp;gt;(
+        &amp;amp;self,
+        request: &amp;amp;Request,
+        response_handle: R,
+    ) -&amp;gt; ResponseInfo;
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;hickory_server&lt;/code&gt;では&lt;code&gt;Catalog&lt;/code&gt;がデフォルトの実装なので、そのコードを参考に決め打ちのIPを返すように実装します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;struct StubRequestHandler {}
+
+impl StubRequestHandler {
+    pub fn new() -&amp;gt; Self {
+        StubRequestHandler {}
+    }
+}
+
+#[async_trait::async_trait]
+impl RequestHandler for StubRequestHandler {
+    async fn handle_request&amp;lt;R: ResponseHandler&amp;gt;(
+        &amp;amp;self,
+        request: &amp;amp;Request,
+        mut response_handle: R,
+    ) -&amp;gt; ResponseInfo {
+        let result = match request.message_type() {
+            MessageType::Query =&amp;gt; match request.op_code() {
+                OpCode::Query =&amp;gt; {
+                    let a = A::new(203, 0, 113, 1);
+                    let rd = RData::A(a);
+                    let r =
+                        Record::from_rdata(request.query().name().into_name().unwrap(), 3600, rd);
+                    let response = MessageResponseBuilder::from_message_request(request);
+                    let response =
+                        response.build(*request.header(), vec![&amp;amp;r], vec![], vec![], vec![]);
+                    response_handle.send_response(response).await
+                }
+                _op =&amp;gt; {
+                    let response = MessageResponseBuilder::from_message_request(request);
+                    response_handle
+                        .send_response(response.error_msg(request.header(), ResponseCode::NotImp))
+                        .await
+                }
+            },
+            MessageType::Response =&amp;gt; {
+                let response = MessageResponseBuilder::from_message_request(request);
+                response_handle
+                    .send_response(response.error_msg(request.header(), ResponseCode::NotImp))
+                    .await
+            }
+        };
+
+        result.unwrap_or_else(|_e| {
+            let mut header = Header::new();
+            header.set_response_code(ResponseCode::ServFail);
+            header.into()
+        })
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;QUERY&lt;/code&gt;にのみ反応し、それ以外は&lt;code&gt;NOTIMP&lt;/code&gt;を返しています。&lt;/p&gt;
+&lt;p&gt;あとは、いい感じに&lt;code&gt;main&lt;/code&gt;を実装してあげます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;#[derive(Parser, Debug)]
+struct Cli {
+    /// Bind address
+    #[clap(long)]
+    bind: SocketAddr,
+}
+
+#[tokio::main]
+async fn main() -&amp;gt; anyhow::Result&amp;lt;()&amp;gt; {
+    let opt = Cli::parse();
+
+    let socket = UdpSocket::bind(&amp;amp;opt.bind).await?;
+    let handler = StubRequestHandler::new();
+    let mut server = ServerFuture::new(handler);
+    server.register_socket(socket);
+    server.block_until_done().await?;
+
+    Ok(())
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;❯ dig @192.168.2.32 www.jyuch.dev
+;; Warning: query response not set
+
+; &amp;lt;&amp;lt;&amp;gt;&amp;gt; DiG 9.18.18-0ubuntu2.1-Ubuntu &amp;lt;&amp;lt;&amp;gt;&amp;gt; @192.168.2.32 www.jyuch.dev
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&amp;gt;&amp;gt;HEADER&amp;lt;&amp;lt;- opcode: QUERY, status: NOERROR, id: 37403
+;; flags: rd ad; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 0
+;; WARNING: recursion requested but not available
+
+;; QUESTION SECTION:
+;www.jyuch.dev.                 IN      A
+
+;; ANSWER SECTION:
+www.jyuch.dev.          3600    IN      A       203.0.113.1
+
+;; Query time: 0 msec
+;; SERVER: 192.168.2.32#53(192.168.2.32) (UDP)
+;; WHEN: Sun Mar 31 19:52:46 JST 2024
+;; MSG SIZE  rcvd: 47
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h1&gt;DNS Fordingする&lt;/h1&gt;
+&lt;p&gt;DNSのクライアント側の実装は&lt;code&gt;hickory_client&lt;/code&gt;クレートにあります。&lt;/p&gt;
+&lt;p&gt;せっかくtokioを使ってるので、上流に問い合わせるためのクライアントとして&lt;code&gt;AsyncClient&lt;/code&gt;を使ってみます。&lt;/p&gt;
+&lt;!--
+と、この記事を書いている今になって気が付いたのですが、`AsyncClient`は`Send + Sync`でした。つらい
+--&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;struct StubRequestHandler {
+    upstream: Arc&amp;lt;Mutex&amp;lt;AsyncClient&amp;gt;&amp;gt;,
+}
+
+impl StubRequestHandler {
+    pub fn new(upstream: Arc&amp;lt;Mutex&amp;lt;AsyncClient&amp;gt;&amp;gt;) -&amp;gt; Self {
+        StubRequestHandler { upstream }
+    }
+}
+
+#[async_trait::async_trait]
+impl RequestHandler for StubRequestHandler {
+    async fn handle_request&amp;lt;R: ResponseHandler&amp;gt;(
+        &amp;amp;self,
+        request: &amp;amp;Request,
+        response_handle: R,
+    ) -&amp;gt; ResponseInfo {
+        let result = match request.message_type() {
+            MessageType::Query =&amp;gt; match request.op_code() {
+                OpCode::Query =&amp;gt; {
+                    let upstream = &amp;amp;mut *self.upstream.lock().await;
+                    forward_to_upstream(upstream, request, response_handle).await
+                }
+                _op =&amp;gt; server_not_implement(request, response_handle).await,
+            },
+            MessageType::Response =&amp;gt; server_not_implement(request, response_handle).await,
+        };
+
+        result.unwrap_or_else(|_e| {
+            let mut header = Header::new();
+            header.set_response_code(ResponseCode::ServFail);
+            header.into()
+        })
+    }
+}
+
+async fn forward_to_upstream&amp;lt;R: ResponseHandler&amp;gt;(
+    upstream: &amp;amp;mut AsyncClient,
+    request: &amp;amp;Request,
+    mut response_handle: R,
+) -&amp;gt; anyhow::Result&amp;lt;ResponseInfo&amp;gt; {
+    let response = upstream
+        .query(
+            request.query().name().into_name().unwrap(),
+            request.query().query_class(),
+            request.query().query_type(),
+        )
+        .await?;
+
+    let response_builder = MessageResponseBuilder::from_message_request(request);
+    let response = response_builder.build(
+        *request.header(),
+        response.answers(),
+        vec![],
+        vec![],
+        vec![],
+    );
+    let response_info = response_handle.send_response(response).await?;
+
+    Ok(response_info)
+}
+
+async fn server_not_implement&amp;lt;R: ResponseHandler&amp;gt;(
+    request: &amp;amp;Request,
+    mut response_handle: R,
+) -&amp;gt; anyhow::Result&amp;lt;ResponseInfo&amp;gt; {
+    let response = MessageResponseBuilder::from_message_request(request);
+    let response_info = response_handle
+        .send_response(response.error_msg(request.header(), ResponseCode::NotImp))
+        .await?;
+
+    Ok(response_info)
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;あとはいい感じに&lt;code&gt;AsyncClient&lt;/code&gt;を構築して&lt;code&gt;StubRequestHandler&lt;/code&gt;に渡してあげればOKです。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;#[derive(Parser, Debug)]
+struct Cli {
+    /// Bind address
+    #[clap(long)]
+    bind: SocketAddr,
+
+    /// Upstream address
+    #[clap(long)]
+    upstream: SocketAddr,
+}
+
+#[tokio::main]
+async fn main() -&amp;gt; anyhow::Result&amp;lt;()&amp;gt; {
+    let opt = Cli::parse();
+
+    let conn = UdpClientStream::&amp;lt;UdpSocket&amp;gt;::new(opt.upstream);
+    let (upstream, background) = AsyncClient::connect(conn).await?;
+    let _handle = tokio::spawn(background);
+    let handler = StubRequestHandler::new(Arc::new(Mutex::new(upstream)));
+
+    let socket = UdpSocket::bind(&amp;amp;opt.bind).await?;
+    let mut server = ServerFuture::new(handler);
+    server.register_socket(socket);
+    server.block_until_done().await?;
+
+    Ok(())
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;❯ dig @192.168.2.32 www.jyuch.dev
+;; Warning: query response not set
+
+; &amp;lt;&amp;lt;&amp;gt;&amp;gt; DiG 9.18.18-0ubuntu2.1-Ubuntu &amp;lt;&amp;lt;&amp;gt;&amp;gt; @192.168.2.32 www.jyuch.dev
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&amp;gt;&amp;gt;HEADER&amp;lt;&amp;lt;- opcode: QUERY, status: NOERROR, id: 7791
+;; flags: rd ad; QUERY: 1, ANSWER: 5, AUTHORITY: 0, ADDITIONAL: 0
+;; WARNING: recursion requested but not available
+
+;; QUESTION SECTION:
+;www.jyuch.dev.                 IN      A
+
+;; ANSWER SECTION:
+www.jyuch.dev.          300     IN      CNAME   jyuch.github.io.
+jyuch.github.io.        3600    IN      A       185.199.111.153
+jyuch.github.io.        3600    IN      A       185.199.109.153
+jyuch.github.io.        3600    IN      A       185.199.108.153
+jyuch.github.io.        3600    IN      A       185.199.110.153
+
+;; Query time: 28 msec
+;; SERVER: 192.168.2.32#53(192.168.2.32) (UDP)
+;; WHEN: Sun Mar 31 20:31:41 JST 2024
+;; MSG SIZE  rcvd: 124
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h1&gt;追記その１&lt;/h1&gt;
+&lt;p&gt;リクエストヘッダをそのままレスポンスヘッダとして打ち返していましたが、そうするとsystemd-resolvedが受け取り拒否します。
+Windowsはあんまり気にしていないみたいですけど。&lt;/p&gt;
+&lt;p&gt;正しくは以下の感じですね。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;let response_header = Header::response_from_request(request.header());
+let response_builder = MessageResponseBuilder::from_message_request(request);
+let response = response_builder.build(
+    response_header,
+    dns_response.as_ref().map(|it| it.answers()).unwrap_or(&amp;amp;[]),
+    &amp;amp;[],
+    &amp;amp;[],
+    &amp;amp;[],
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;digの結果の一行目に警告が載ってましたね・・・&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-text&quot;&gt;;; Warning: query response not set
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h1&gt;追記その２&lt;/h1&gt;
+&lt;p&gt;単純に&lt;code&gt;Header::response_from_request&lt;/code&gt;するとレスポンスヘッダに再起フラグが立たないので、上位DNSからのレスポンスヘッダに再起フラグが立っていたら立ててあげる必要があるようです。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;let mut response_header = Header::response_from_request(request.header());
+response_header.set_recursion_available(response.recursion_available());
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;でないとこんな警告がでます。というか出てましたね。ちゃんと読めよ&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-text&quot;&gt;;; WARNING: recursion requested but not available
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>RustでもOTLPでJaegerにテレメトリを送りたい</title>
+		<link href="https://www.jyuch.dev/posts/2023/09-08-rust-with-otlp/"/>
+		<updated>2023-09-18T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2023/09-08-rust-with-otlp/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;テキストベースのロギングは時代遅れ、時代はOpenTelemetryを使ったハイカラな計装！！ということでタイトル通りに試してみます。&lt;/p&gt;
+&lt;p&gt;とはいってもRust関係でまとまった記事を書いてくださってるのは以下のブログくらいみたいなので、とりあえずは以下の記事を参考に試してみます。&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://blog.ymgyt.io/entry/starting_opentelemetry_with_rust/&quot;&gt;RustでOpenTelemetryをはじめよう&lt;/a&gt;&lt;/p&gt;
+&lt;h1&gt;OpenTelemetry&lt;/h1&gt;
+&lt;p&gt;OpenTelemetryはそれぞれの監視ツールベンダが提供してきたAPIを共通化し、アプリケーションコードから可能な限りベンダ固有のコードを除去することを目的としてる。と個人的に認識しています。&lt;/p&gt;
+&lt;p&gt;例えばNew RelicからAWS X-Rayに監視バックエンドを変更しようとした際、OpenTelemetryを使用していればアプリケーションのコネクタ部分だけ変えればすぐにメトリクスの送信先を変えられるといった感じらしいです。&lt;/p&gt;
+&lt;p&gt;今回はシングルバイナリでサクッと建てられる&lt;a href=&quot;https://www.jaegertracing.io/&quot;&gt;Jaeger&lt;/a&gt;を使います。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bat&quot;&gt;setlocal
+
+set BASE_DIR=%~dp0
+
+set SPAN_STORAGE_TYPE=badger
+set BADGER_EPHEMERAL=false
+set BADGER_DIRECTORY_VALUE=C:&#92;path&#92;to&#92;.jaeger&#92;data
+set BADGER_DIRECTORY_KEY=C:&#92;path&#92;to&#92;.jaeger&#92;key
+
+start http://localhost:16686 
+call %BASE_DIR%jaeger-all-in-one.exe
+
+endlocal
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;みたいなバッチを作っておくとサクッと立ち上げられるので便利です。&lt;/p&gt;
+&lt;h1&gt;tracingの初期化&lt;/h1&gt;
+&lt;p&gt;今回はトレーシングライブラリとして&lt;a href=&quot;https://github.com/tokio-rs/tracing&quot;&gt;tokio-rs/tracing&lt;/a&gt;を使用します。&lt;/p&gt;
+&lt;p&gt;tracingのレイヤーとしてOpenTelemetryのテレメトリを送信するControllerを差し込みます。&lt;/p&gt;
+&lt;p&gt;tracing自体はtokioには依存せず使用できますが、テレメトリの送信にgRPCを使用しており、gRPCがtonicを使用しているため自動的にtokioに依存することになります。
+が、そこそこの規模のアプリケーションを開発する場合ほぼtokioを使うことになると思うので特に気にしなくても良いと思います。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;use opentelemetry::sdk::metrics::controllers::BasicController;
+use opentelemetry_otlp::WithExportConfig;
+
+pub(crate) struct OtelInitGuard();
+
+impl Drop for OtelInitGuard {
+    fn drop(&amp;amp;mut self) {
+        opentelemetry::global::shutdown_tracer_provider();
+    }
+}
+
+// https://github.com/open-telemetry/opentelemetry-rust/blob/d4b9befea04bcc7fc19319a6ebf5b5070131c486/examples/basic-otlp/src/main.rs#L35-L52
+fn build_metrics_controller() -&amp;gt; BasicController {
+    use opentelemetry::sdk::export::metrics::aggregation::cumulative_temporality_selector;
+    use opentelemetry::sdk::metrics::selectors::simple::histogram;
+
+    opentelemetry_otlp::new_pipeline()
+        .metrics(
+            histogram(Vec::new()),
+            cumulative_temporality_selector(),
+            opentelemetry::runtime::Tokio,
+        )
+        .with_exporter(
+            opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_endpoint(&amp;quot;http://localhost:4317&amp;quot;),
+        )
+        .build()
+        .expect(&amp;quot;Failed to build metrics controller&amp;quot;)
+}
+
+pub(crate) fn init_tracing(service: &amp;amp;&#39;static str, version: &amp;amp;&#39;static str) -&amp;gt; OtelInitGuard {
+    use opentelemetry::sdk::trace::{RandomIdGenerator, Sampler};
+
+    // Configure otel exporter.
+    let tracer = opentelemetry_otlp::new_pipeline()
+        .tracing()
+        .with_exporter(
+            opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_endpoint(&amp;quot;http://localhost:4317&amp;quot;),
+        )
+        .with_trace_config(
+            opentelemetry::sdk::trace::config()
+                .with_sampler(Sampler::AlwaysOn)
+                .with_id_generator(RandomIdGenerator::default())
+                .with_resource(opentelemetry::sdk::Resource::new(vec![
+                    opentelemetry::KeyValue::new(&amp;quot;service.name&amp;quot;, service),
+                    opentelemetry::KeyValue::new(&amp;quot;service.version&amp;quot;, version),
+                ])),
+        )
+        .install_batch(opentelemetry::runtime::Tokio)
+        // .install_simple()
+        .expect(&amp;quot;Not running in tokio runtime&amp;quot;);
+
+    // Compatible layer with tracing.
+    let otel_trace_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+    let otel_metrics_layer = tracing_opentelemetry::MetricsLayer::new(build_metrics_controller());
+
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+
+    tracing_subscriber::Registry::default()
+        .with(tracing_subscriber::fmt::Layer::new())
+        .with(otel_trace_layer)
+        .with(otel_metrics_layer)
+        .with(tracing_subscriber::filter::LevelFilter::INFO)
+        .init();
+
+    OtelInitGuard()
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h1&gt;アプリケーションコード&lt;/h1&gt;
+&lt;p&gt;起動時にOpenTelemetryの初期化さえしてしまえば、あとは普通にtracingを使うだけです。&lt;/p&gt;
+&lt;p&gt;メソッドに&lt;code&gt;#[instrument]&lt;/code&gt;を貼れば自動的にSpanを作ってコンテキストを埋め込んでくれるので便利です。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;mod otl;
+
+use crate::otl::init_tracing;
+use tracing::{error, info, instrument};
+
+#[instrument]
+async fn start(x: i32, y: i32) -&amp;gt; Option&amp;lt;i32&amp;gt; {
+    add(multiply(x, y).await, multiply(x, y).await).await
+}
+
+#[instrument]
+async fn add(x: i32, y: i32) -&amp;gt; Option&amp;lt;i32&amp;gt; {
+    let ans = x + y;
+
+    if ans &amp;lt;= 10 {
+        info!(
+            ans = ans,
+            &amp;quot;特に出すべきログがないからとりあえず適当なメッセージを出しています&amp;quot;
+        );
+        Some(ans)
+    } else {
+        error!(ans = ans, &amp;quot;something went wrong&amp;quot;);
+        None
+    }
+}
+
+#[instrument]
+async fn multiply(x: i32, y: i32) -&amp;gt; i32 {
+    x * y
+}
+
+#[tokio::main]
+async fn main() {
+    let service = env!(&amp;quot;CARGO_PKG_NAME&amp;quot;);
+    let version = env!(&amp;quot;CARGO_PKG_VERSION&amp;quot;);
+
+    let _guard = init_tracing(service, version);
+
+    let value = start(1, 2).await;
+    println!(&amp;quot;{:?}&amp;quot;, value);
+
+    let value = start(10, 22).await;
+    println!(&amp;quot;{:?}&amp;quot;, value);
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/09-08-rust-with-otlp/jaeger.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/jyuch/tracing_otlp&quot;&gt;jyuch/tracing_otlp&lt;/a&gt;&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>ドメインをGoogle DomainからCloudflareに移管したお話</title>
+		<link href="https://www.jyuch.dev/posts/2023/08-16-domain-transfer-google-domain-to-cloudflare/"/>
+		<updated>2023-08-16T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2023/08-16-domain-transfer-google-domain-to-cloudflare/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;このエントリが公開されているということは、すでに&lt;code&gt;jyuch.dev&lt;/code&gt;ドメインはGoogle DomainからCloudflareに移管されているということになります。&lt;/p&gt;
+&lt;p&gt;皆さんご存じの通り&lt;s&gt;サービスのやめ癖がひどい&lt;/s&gt;Googleさんがドメイン事業をSquarespaceに売却してしまい、ドメイン維持費が倍近くなってしまったのでCloudflareにドメインを移管しました。&lt;/p&gt;
+&lt;p&gt;ドメイン事業の売却自体は随分と前からアナウンスされていたのですが、Cloudflareが&lt;code&gt;.dev&lt;/code&gt;TLDをサポートしたのが最近だったので移管が今更になってしまったという感じです。&lt;/p&gt;
+&lt;h1&gt;移管&lt;/h1&gt;
+&lt;p&gt;移管の作業自体はググればいくらでも出てくるので割愛します。&lt;/p&gt;
+&lt;p&gt;あくまでもドメインレジストラの移管とDNSを移行しただけなので、TLSの終端やプロキシなどのCloudflareさんのCDNサービスへの切り替えとかは一切していません。&lt;/p&gt;
+&lt;h1&gt;おわりに&lt;/h1&gt;
+&lt;p&gt;Cloudflareさんのドメイン維持費は年間$10なので、日本円は為替によって若干変わります。&lt;/p&gt;
+&lt;p&gt;決済時に異常な円安になっていないことを共に祈りましょう。&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>Rustでも文字数をカウントしたい</title>
+		<link href="https://www.jyuch.dev/posts/2023/03-17-rust-and-unicode/"/>
+		<updated>2023-03-17T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2023/03-17-rust-and-unicode/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;後輩にUnicodeを熱く語ったら引かれました。どうも弊社です&lt;/p&gt;
+&lt;p&gt;今まで結構Rustのコードを書いていましたが、そういえば日本語周りの挙動を確認していなかったなということで確認してみます。&lt;/p&gt;
+&lt;h1&gt;前提知識&lt;/h1&gt;
+&lt;p&gt;この辺はドキュメントに書いてあるので割と周知な内容なんじゃないかなという所ですが、Rustは内部的には文字列はUTF-8で扱っています。&lt;/p&gt;
+&lt;p&gt;背景は調べてないので知りません。
+多分JSONのシリアライズ・デシリアライズとかで変換コストが減るとか、メモリ消費量を減らしたいとかなんとかじゃないでしょうか。&lt;/p&gt;
+&lt;h1&gt;文字数カウント&lt;/h1&gt;
+&lt;p&gt;&lt;code&gt;String&lt;/code&gt;には&lt;code&gt;pub fn len(&amp;amp;self) -&amp;gt; usize&lt;/code&gt;なメソッドが生えていますが、このメソッドはバイト数を返してきます。
+Rustのドキュメントは文字はUTF-8であることをしつこいくらい書いているので、納得できる挙動ではあります。&lt;/p&gt;
+&lt;p&gt;が、我々日本人は漢字を使わないといけない為、それでは困るわけです。&lt;/p&gt;
+&lt;p&gt;そこで、&lt;code&gt;pub fn chars(&amp;amp;self) -&amp;gt; Chars&amp;lt;&#39;_&amp;gt;&lt;/code&gt;なメソッドを呼び出して&lt;code&gt;char&lt;/code&gt;のイテレータを取得し、その数を数えれば文字数をカウント出来ます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;let a = String::from(&amp;quot;Hello World&amp;quot;);
+let b = String::from(&amp;quot;こんにちは&amp;quot;);
+
+println!(&amp;quot;{} {} {}&amp;quot;, a, a.len(), a.chars().count());
+println!(&amp;quot;{} {} {}&amp;quot;, b, b.len(), b.chars().count());
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;Hello World 11 11
+こんにちは 15 5
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h1&gt;本当にそれでいいの？&lt;/h1&gt;
+&lt;p&gt;ここまでの説明で、「&lt;code&gt;a.chars().count()&lt;/code&gt;を呼び出せばいいのね！」と納得して帰る人は文字コードの怖さを知らない人です。
+Unicode規格票で素振りを1000回やってから出直してきてください。&lt;/p&gt;
+&lt;p&gt;上の文をもう一度読んでみましょう。&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;&lt;code&gt;pub fn chars(&amp;amp;self) -&amp;gt; Chars&amp;lt;&#39;_&amp;gt;&lt;/code&gt;なメソッドを呼び出して&lt;code&gt;char&lt;/code&gt;のイテレータを取得し、&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;そうです。このメソッドは&lt;code&gt;char&lt;/code&gt;、すなわちコードポイントのイテレータを返すに過ぎないわけです。&lt;/p&gt;
+&lt;p&gt;この方法だと「は（U+306F）」+「゜（U+309A）」で表現される「ぱ」は容赦なく2文字としてカウントされます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;let a = vec![&#39;は&#39;, &#39;&#92;u{309A}&#39;];
+let a: String = a.iter().collect();
+println!(&amp;quot;{} {} {}&amp;quot;, a, a.len(), a.chars().count());
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;ぱ 6 2
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;ソフトウェアエンジニア相手なら「内部的には2文字なんですよ～」と言えばいいだけ？ですが、一般人にそんなことを言っても「何言ってんだこいつ」となるだけです。&lt;/p&gt;
+&lt;h1&gt;Unicode正規化&lt;/h1&gt;
+&lt;p&gt;しかし、我々にはアクセント記号などを分解後再結合できるUnicode正規化という法具が存在します。&lt;/p&gt;
+&lt;p&gt;が、Rustの標準ライブラリに入ってません。
+&lt;a href=&quot;https://github.com/unicode-rs/unicode-normalization&quot;&gt;unicode-normalization&lt;/a&gt;を使うしかなさそうです。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-toml&quot;&gt;[dependencies]
+unicode-normalization = &amp;quot;0.1&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;fn test(value: &amp;amp;Vec&amp;lt;char&amp;gt;) {
+    use unicode_normalization::UnicodeNormalization as _;
+
+    let str: String = value.iter().collect();
+    println!(&amp;quot;{} {} {}&amp;quot;, str, str.len(), str.chars().count());
+
+    let str = str.nfc().to_string();
+    println!(&amp;quot;{} {} {}&amp;quot;, str, str.len(), str.chars().count());
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;let a = vec![&#39;は&#39;, &#39;&#92;u{309A}&#39;];
+test(&amp;amp;a);
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;ぱ 6 2
+ぱ 3 1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;しかし、結合後の文字が収録されていない文字はやはりだめです。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;let a = vec![&#39;か&#39;, &#39;&#92;u{309A}&#39;];
+test(&amp;amp;a);
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;か゚ 6 2
+か゚ 6 2
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h1&gt;Unicodeテキストセグメンテーション&lt;/h1&gt;
+&lt;p&gt;そこで、Unicode® Standard Annex #29 UNICODE TEXT SEGMENTATIONの出番です。&lt;/p&gt;
+&lt;p&gt;こいつでGrapheme Cluster Boundaries（書記素単位）でぶった切ってやればいいのです。&lt;/p&gt;
+&lt;p&gt;同じunicode-rsグループが開発している&lt;a href=&quot;https://github.com/unicode-rs/unicode-segmentation&quot;&gt;unicode-segmentation&lt;/a&gt;クレートを使用します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-toml&quot;&gt;[dependencies]
+unicode-segmentation = &amp;quot;1&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;fn test(value: &amp;amp;Vec&amp;lt;char&amp;gt;) {
+    use unicode_normalization::UnicodeNormalization as _;
+    use unicode_segmentation::UnicodeSegmentation as _;
+
+    let str: String = value.iter().collect();
+    println!(&amp;quot;{} {} {}&amp;quot;, str, str.len(), str.chars().count());
+
+    let str = str.nfc().to_string();
+    println!(&amp;quot;{} {} {}&amp;quot;, str, str.len(), str.chars().count());
+
+    let g = str.graphemes(true).collect::&amp;lt;Vec&amp;lt;&amp;amp;str&amp;gt;&amp;gt;();
+    println!(&amp;quot;{} {} {}&amp;quot;, str, str.len(), g.len());
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;let a = vec![&#39;か&#39;, &#39;&#92;u{309A}&#39;];
+test(&amp;amp;a);
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;か゚ 6 2
+か゚ 6 2
+か゚ 6 1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;なしとげました&lt;/p&gt;
+&lt;p&gt;これならみんな大好きIVSも正しくカウントできます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;let a = vec![&#39;&#92;u{8FBB}&#39;, &#39;&#92;u{E0100}&#39;];
+test(&amp;amp;a);
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;辻󠄀 7 2
+辻󠄀 7 2
+辻󠄀 7 1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;let a = vec![&#39;&#92;u{1F385}&#39;, &#39;&#92;u{1F3FF}&#39;];
+test(&amp;amp;a);
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;🎅🏿 8 2
+🎅🏿 8 2
+🎅🏿 8 1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h1&gt;おわりに&lt;/h1&gt;
+&lt;p&gt;文字コードを舐めると死にます&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>2022年の振り返りとか</title>
+		<link href="https://www.jyuch.dev/posts/2023/03-03-look-back-2022/"/>
+		<updated>2023-03-03T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2023/03-03-look-back-2022/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;そういえば2022年の振り返りとかをやっていなかったなという事で、いまさらながら振り返りです。&lt;/p&gt;
+&lt;h1&gt;プログラミング&lt;/h1&gt;
+&lt;p&gt;個人的な活動としては、2021年はほぼGitHubなどにコードを上げていなかったので、2022年はアウトプットを出そうと心がけていました。
+製品レベルではないにせよ、個人で使うようなRustでコンソールツールを実装してGitHubに上げられたのかなという感じです。
+ただ、かなり小規模なツールばかりなので2023年では何か大規模なプログラムを組み上げたいですね。&lt;/p&gt;
+&lt;p&gt;お仕事としては今年も（？）かなりのJavaとちょっとのC#を書きましたが、特に目新しい何かがあったわけではありませんでした。&lt;/p&gt;
+&lt;p&gt;正直今のお仕事で出来る限界が見えてきてしまっているので、2023年は新しいお仕事に挑戦してもいいかもしれないと感じるお年頃です。&lt;/p&gt;
+&lt;h1&gt;ブログ&lt;/h1&gt;
+&lt;p&gt;正直ほとんど書かなかったですね。&lt;/p&gt;
+&lt;p&gt;長く書いていると自分の中の記事のクオリティのハードルがどんどん上がっていくのを感じます。
+きれいにまとめて体系立てて書かないといけないんじゃないかみたいな観念ですね。&lt;/p&gt;
+&lt;p&gt;まぁ無理に書こうとしてもｱﾚなので、2023年もほどほどに書けることを書いていこうというスタンスでやっていこうと思います。&lt;/p&gt;
+&lt;h1&gt;おわりに&lt;/h1&gt;
+&lt;p&gt;結論としては無理せず今後もやりたいようにやっていきましょうという感じです。&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>k3sでもローカルなDockerリポジトリを使用したい</title>
+		<link href="https://www.jyuch.dev/posts/2022/use-mirror-repository-in-k3s/"/>
+		<updated>2022-11-16T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2022/use-mirror-repository-in-k3s/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://www.jyuch.dev/posts/2022/build-container-image-in-k3s-using-buildkit/&quot;&gt;前回&lt;/a&gt;k3s上でBuildKitを使用してコンテナイメージをビルドしてそのままk3sに読み込ませるという割と強引な事をやったのですが、やっぱりちゃんとコンテナレジストリを立てて運用した方がいろいろ良いよねというお話です。&lt;/p&gt;
+&lt;p&gt;今回はローカルにコンテナレジストリを立てて、Pull-throughなキャッシュを立ててDocker Hub君を労わりつつ、独自のイメージをホストさせます。&lt;/p&gt;
+&lt;h2&gt;コンテナレジストリ&lt;/h2&gt;
+&lt;p&gt;今回はコンテナレジストリとして&lt;a href=&quot;https://www.sonatype.com/products/repository-oss-download&quot;&gt;Sonatype Nexus Repository Manager OSS&lt;/a&gt;を使用します。&lt;/p&gt;
+&lt;p&gt;以下のような感じでリポジトリを立てます。&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;名前&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;タイプ&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;ポート&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;説明&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;docker-group&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;group&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;9000&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;下の二つのリポジトリを仮想的にまとめるリポジトリ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;docker-hosted&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;hosted&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;9001&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;独自のコンテナイメージをホストするリポジトリ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;docker.io-proxy&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;proxy&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;9002&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Docker Hubのミラーキャッシュ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;k3s側でクレデンシャルをｺﾈｺﾈするのがめんどくさいので私は「Allow anonymous doker
+pull」にチェックボックスを入れて匿名でのpullを許可させましたが、この辺は組織のポリシーでいい感じに設定すればいいと思います。&lt;/p&gt;
+&lt;p&gt;また、「Anonymous Access」から「Allow anonimous user to access the
+server」にチェックを入れ、「Realms」で「Docker Bearer Token
+Realms」を有効にしておかないと匿名のpullが弾かれます。（1敗）&lt;/p&gt;
+&lt;h2&gt;Docker側の設定&lt;/h2&gt;
+&lt;p&gt;そうしたらまずDockerがこのリポジトリからpull出来るようにします。&lt;/p&gt;
+&lt;p&gt;お好みに合わせて、&lt;code&gt;/etc/hosts&lt;/code&gt;にリポジトリをホストしているサーバのIPアドレスを追加します。
+長いとイメージ名を指定するときにつらいので、私は&lt;code&gt;ocr&lt;/code&gt;みたいに短い名前にしてしまっています。&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;/etc/docker/daemon.json&lt;/code&gt;でDocker
+Hubの代わりにアクセスするレジストリミラーとhttpでアクセスするためのおまじないを設定します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-json&quot;&gt;{
+  &amp;quot;insecure-registries&amp;quot;: [&amp;quot;ocr:9000&amp;quot;, &amp;quot;ocr:9001&amp;quot;],
+  &amp;quot;registry-mirrors&amp;quot;: [&amp;quot;http://ocr:9000&amp;quot;]
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;勘のいい人は気が付いたかと思いますが、docker-groupの9000だけではなくdocker-hostedの9001も登録しています。&lt;/p&gt;
+&lt;p&gt;弊社も動作検証中に気が付いたのですが、OSSのNexus君はgroupリポジトリへのpushは出来ないみたいです。&lt;/p&gt;
+&lt;p&gt;そのため、イメージのpushはhosted側に行い、pullはgroup側から行うことにしました。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;# Sonatype社からの課金のお誘い
+$ docker push ocr:9000/jyuch/blog:20221115   
+The push refers to repository [ocr:9000/jyuch/blog]
+a2a9af77c400: Layer already exists 
+a2e59a79fae0: Layer already exists 
+4091cd312f19: Layer already exists 
+9e7119c28877: Layer already exists 
+2280b348f4d6: Layer already exists 
+e74d0d8d2def: Layer already exists 
+a12586ed027f: Layer already exists 
+denied: Deploying to groups is a PRO-licensed feature. See https://links.sonatype.com/product-nexus-repository
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;あとは&lt;code&gt;ocr:9001&lt;/code&gt;側で&lt;code&gt;docker login&lt;/code&gt;をすればOKです。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;docker login ocr:9001
+Username: kawata
+Password: 
+WARNING! Your password will be stored unencrypted in /home/jyuch/.docker/config.json.
+Configure a credential helper to remove this warning. See
+https://docs.docker.com/engine/reference/commandline/login/#credentials-store
+
+Login Succeeded
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;k3s&lt;/h2&gt;
+&lt;p&gt;とりあえずDocker側pushとpullが出来ることを確認できたら、次はk3s側です。&lt;/p&gt;
+&lt;p&gt;同様に&lt;code&gt;/etc/hosts&lt;/code&gt;を編集し、&lt;code&gt;/etc/rancher/k3s/registries.yaml&lt;/code&gt;を編集します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;mirrors:
+  docker.io:
+    endpoint:
+      - &amp;quot;http://ocr:9000&amp;quot;
+  &amp;quot;ocr:9000&amp;quot;:
+    endpoint:
+      - &amp;quot;http://ocr:9000&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;こちらではイメージのpushはしない為、group側の設定だけで大丈夫です。&lt;/p&gt;
+&lt;p&gt;適当なPodを展開してちゃんとイメージを引っ張ってきて来れているかを確認します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-yaml&quot;&gt;---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blog-nginx-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: blog-nginx
+  template:
+    metadata:
+      labels:
+        app: blog-nginx
+    spec:
+      containers:
+      - name: blog-container
+        image: ocr:9000/jyuch/blog:20221116
+        ports:
+          - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: blog-nginx
+spec:
+  type: LoadBalancer
+  ports:
+    - name: &amp;quot;http-port&amp;quot;
+      protocol: &amp;quot;TCP&amp;quot;
+      port: 18080
+      targetPort: 80
+  selector:
+    app: blog-nginx
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;おわりに&lt;/h2&gt;
+&lt;p&gt;とりあえずこれでPull-throughなキャッシュと独自リポジトリが立てられました。&lt;/p&gt;
+&lt;p&gt;なんかBuildKit側がPull-throughキャッシュを見ていない疑惑がありますが、そもそもあの子キャッシュの扱いがよくわかんないのでまぁその辺はおいおい確認していきます。&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>k3sでもBuildKitを使用してイメージをビルドしたい</title>
+		<link href="https://www.jyuch.dev/posts/2022/build-container-image-in-k3s-using-buildkit/"/>
+		<updated>2022-11-12T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2022/build-container-image-in-k3s-using-buildkit/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;家で運用しているサーバ機&lt;s&gt;をアップデートに失敗して吹き飛ばした&lt;/s&gt;とある事情で空いたので、k3sをインストールしました。&lt;/p&gt;
+&lt;p&gt;せっかく？なので、k3s上でイメージをビルドできるようにしておくとなんか捗りそうな気がするので方法を確認しておきます。&lt;/p&gt;
+&lt;h2&gt;Dockerfileの準備&lt;/h2&gt;
+&lt;p&gt;とりあえずサクッとRustでマルチステージビルドを行うDockerfileを用意します。&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/jyuch/rust-multistage-build&quot;&gt;jyuch/rust-multistage-build&lt;/a&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-dockerfile&quot;&gt;FROM rust:1.65.0-bullseye AS builder
+
+ADD . /src
+WORKDIR /src
+RUN --mount=type=cache,target=/usr/local/cargo/registry &#92;
+    cargo build --release
+
+FROM gcr.io/distroless/cc
+
+COPY --from=builder /src/target/release/ferris_says ferris_says
+CMD [&amp;quot;./ferris_says&amp;quot;]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;とりあえずDockerのBuildKitでビルドできるか確認しておきます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ docker buildx build -t ferris_says:latest .
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;実行するとこんな感じです。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ docker run --rm -it ferris_says:latest
+ __________________________
+&amp;lt; Hello fellow Rustaceans! &amp;gt;
+ --------------------------
+        &#92;
+         &#92;
+            _~^~^~_
+        &#92;) /  o o  &#92; (/
+          &#39;_   -   _&#39;
+          / &#39;-----&#39; &#92;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;k3s側のビルド用のPodの用意&lt;/h2&gt;
+&lt;p&gt;k3s側でビルドするのに必要なマニフェストはBuildKit側で用意してくれていたのでそれをそのまま使用します。&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/moby/buildkit/tree/master/examples/kubernetes&quot;&gt;Kubernetes manifests for BuildKit&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;今回はとりあえずPodで生やします。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ kubectl apply -f pod.rootless.yaml
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ kubectl get pods
+NAME        READY   STATUS    RESTARTS   AGE
+buildkitd   1/1     Running   0          124m
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;BuildKitを使用してのビルド&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;buildctl&lt;/code&gt;を使用してビルドをします。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;buildctl --addr kube-pod://buildkitd build &#92;
+  --frontend dockerfile.v0 &#92;
+  --local context=. &#92;
+  --local dockerfile=. &#92;
+  --output type=oci,name=ferris_says:latest &amp;gt; ferris_says.tar
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;ビルドがうまくいくとイメージがtarに詰まって出てくるので、あとはそれをk3sに突っ込むだけです。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ sudo k3s ctr images import ferris_says.tar
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ sudo k3s crictl images                                                               
+IMAGE                                        TAG                    IMAGE ID            SIZE
+docker.io/library/ferris_says                latest                 7948ed6b9ec95       10.6MB
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;ここまで来ればあとはイメージを動かすだけです。&lt;/p&gt;
+&lt;p&gt;この時、&lt;code&gt;--image-pull-policy=Never&lt;/code&gt;を指定してイメージをプルしないようにしないとイメージ取得で詰まっていい感じに動いてくれません。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;$ kubectl run ferris-says --restart=Never --image=docker.io/library/ferris_says:latest --rm -it --image-pull-policy=Never
+ __________________________
+&amp;lt; Hello fellow Rustaceans! &amp;gt;
+ --------------------------
+        &#92;
+         &#92;
+            _~^~^~_
+        &#92;) /  o o  &#92; (/
+          &#39;_   -   _&#39;
+          / &#39;-----&#39; &#92;
+pod &amp;quot;ferris-says&amp;quot; deleted
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+</feed>
