@@ -1,13 +1,13 @@
+@use "css/home.scss";
+@use "css/reset.scss";
+@use "css/navbar.scss";
+@use "css/search.scss";
+@use "css/post-list.scss";
+@use "css/post.scss";
+@use "css/tag.scss";
+
 /* Code syntax highlight */
-@import "https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.6.0/build/styles/github.min.css";
+@import "https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css";
 
 /* Web font */
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300&display=swap');
-
-@import "css/home.scss";
-@import "css/reset.scss";
-@import "css/navbar.scss";
-@import "css/search.scss";
-@import "css/post-list.scss";
-@import "css/post.scss";
-@import "css/tag.scss";
