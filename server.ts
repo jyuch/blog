@@ -3,7 +3,7 @@ import expires from "lume/middlewares/expires.ts";
 import notFound from "lume/middlewares/not_found.ts";
 
 const server = new Server({
-  port: 8000,
+  port: 3000,
   root: `${Deno.cwd()}/_site`,
 });
 
@@ -15,4 +15,4 @@ server.use(notFound({
 
 server.start();
 
-console.log("Listening on http://localhost:8000");
+console.log("Listening on http://localhost:3000");
