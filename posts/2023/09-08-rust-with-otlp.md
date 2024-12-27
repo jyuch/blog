@@ -178,6 +178,6 @@ async fn main() {
 }
 ```
 
-![](/img/09-08-rust-with-otlp/jaeger.png)
+![](/img/2023/09-08-rust-with-otlp/jaeger.png)
 
 [jyuch/tracing_otlp](https://github.com/jyuch/tracing_otlp)
