@@ -42,7 +42,9 @@ OpenJDKの公式リファレンス曰く、英語版のWindowsのみを公式で
 
 どのバージョンでも`build\windows-x86_64-server-release\jdk`にバイナリが吐かれています。
 
-また、大体どのバージョンでも手元のマシンだとビルドで30分位、`test-tier1`で3時間位掛かるのでゆっくりしていってね！！！
+大体どのバージョンでも手元のマシンだとビルドで30分位、`test-tier1`で3時間位掛かるのでゆっくりしていってね！！！
+
+あと、ビルドに時間が掛かるからって調子に乗って複数バージョンの同時ビルドを流すと、たまにテストがタイムアウトして失敗扱いになるので注意しましょう。（1敗）
 
 ## OpenJDK23
 
@@ -87,7 +89,21 @@ make all; make test-tier1
 --with-jtreg=/cygdrive/c/java/jtreg
 ```
 
-いくつかのhotspotテストが失敗として報告されますが、動くので多分問題ないでしょう。
+googletestを無効化したせいでいくつかのhotspotテストが失敗として報告されますが、動くので多分問題ないでしょう。
+
+```sh
+make all; make test-tier1
+```
+
+## OpenJDK 20
+
+ビルド中にワーニング出てきて若干不穏な感じになりますが、まぁビルドが通るので良しとしましょう。
+
+```sh
+bash configure \
+--with-boot-jdk=/cygdrive/c/java/jdk-20.0.2+9 \
+--with-jtreg=/cygdrive/c/java/jtreg
+```
 
 ```sh
 make all; make test-tier1
