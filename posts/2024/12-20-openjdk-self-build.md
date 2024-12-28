@@ -74,4 +74,23 @@ bash configure \
 make all; make test-tier1
 ```
 
+## OpenJDK 21
+
+最新のLTSですが、googletestを有効にするとビルドに失敗するようになります。
+ここから雲行きが怪しくなります。
+
+とりあえずバイナリが欲しいので、googletestを無効にしてビルドを進めます。
+
+```sh
+ bash configure \
+--with-boot-jdk=/cygdrive/c/java/jdk-21.0.5+11 \
+--with-jtreg=/cygdrive/c/java/jtreg
+```
+
+いくつかのhotspotテストが失敗として報告されますが、動くので多分問題ないでしょう。
+
+```sh
+make all; make test-tier1
+```
+
 おわり
