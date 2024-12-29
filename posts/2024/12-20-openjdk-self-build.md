@@ -109,4 +109,16 @@ bash configure \
 make all; make test-tier1
 ```
 
+## OpenJDK 19
+
+```sh
+bash configure \
+--with-boot-jdk/cygdrive/c/java/jdk-19.0.2+7 \
+--with-jtreg=/cygdrive/c/java/jtreg
+```
+
+```sh
+make all; make test-tier1
+```
+
 おわり
