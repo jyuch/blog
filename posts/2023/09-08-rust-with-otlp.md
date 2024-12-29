@@ -2,11 +2,19 @@
 title: RustでもOTLPでJaegerにテレメトリを送りたい
 description: RustからOpenTelemetryプロトコルを使用してJaegerにテレメトリを送る方法を確認します
 date: 2023-09-18
-lastModified: 2023-09-18
+lastModified: 2024-12-29
 tags: 
   - rust
   - otlp
 ---
+
+# 2024年12月29日追記
+
+RustのOpenTelemetryライブラリはまだ安定化されておらず、割とドラスティックにAPIが更新されています。
+
+そのため、現時点の最新のライブラリを使おうとして下のコードをコピペしてもビルドが通らないと思います。
+
+拙作のadvoidの[trace.rs](https://github.com/jyuch/advoid/blob/master/src/trace.rs)は割と最近のバージョンへの追従を頑張っているので、良かったらそちらを参考にしてみてください。
 
 # はじめに
 
