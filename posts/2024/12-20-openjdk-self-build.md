@@ -2,7 +2,7 @@
 title: WindowsでもOpenJDKを野良ビルドしたい
 description: ソースコードからOpenJDKをビルドする方法を確認します
 date: 2024-12-20
-lastModified: 2024-12-28
+lastModified: 2024-12-29
 tags:
   - jdk
 ---
@@ -42,11 +42,11 @@ OpenJDKの公式リファレンス曰く、英語版のWindowsのみを公式で
 
 どのバージョンでも`build\windows-x86_64-server-release\jdk`にバイナリが吐かれています。
 
-大体どのバージョンでも手元のマシンだとビルドで30分位、`test-tier1`で3時間位掛かるのでゆっくりしていってね！！！
+大体どのバージョンでも手元のマシンだとビルドで30分位、`test-tier1`で2時間位掛かるのでゆっくりしていってね！！！
 
 あと、ビルドに時間が掛かるからって調子に乗って複数バージョンの同時ビルドを流すと、たまにテストがタイムアウトしてError扱いになるので注意しましょう。（4敗）
 
-## OpenJDK23
+## OpenJDK 23 (23.0.1-11)
 
 最新ならとっても簡単です。
 
@@ -61,7 +61,7 @@ bash configure \
 make all; make test-tier1
 ```
 
-## OpenJDK22
+## OpenJDK 22 (22.0.2-9)
 
 22までならなんの捻りもなくビルドが通ります。
 
@@ -76,7 +76,7 @@ bash configure \
 make all; make test-tier1
 ```
 
-## OpenJDK 21
+## OpenJDK 21 (21.0.6-6)
 
 最新のLTSですが、googletestを有効にするとビルドに失敗するようになります。
 ここから雲行きが怪しくなります。
@@ -95,7 +95,7 @@ googletestを無効化したせいでいくつかのhotspotテストが失敗と
 make all; make test-tier1
 ```
 
-## OpenJDK 20
+## OpenJDK 20 (20.0.2-ga)
 
 ビルド中にワーニング出てきて若干不穏な感じになりますが、まぁビルドが通るので良しとしましょう。
 
@@ -105,11 +105,13 @@ bash configure \
 --with-jtreg=/cygdrive/c/java/jtreg
 ```
 
+20からgoogletest起因以外でテストが1件失敗し始めます。
+
 ```sh
 make all; make test-tier1
 ```
 
-## OpenJDK 19
+## OpenJDK 19 (19.0.2-ga)
 
 ```sh
 bash configure \
@@ -119,6 +121,78 @@ bash configure \
 
 ```sh
 make all; make test-tier1
+```
+
+## OpenJDK 18 (18.0.2.1-0)
+
+```sh
+bash configure \
+--with-boot-jdk=/cygdrive/c/java/jdk-18.0.2.1+1 \
+--with-jtreg=/cygdrive/c/java/jtreg
+```
+
+```sh
+make all; make test-tier1
+```
+
+## OpenJDK 17 (17.0.14-6)
+
+```sh
+bash configure \
+--with-boot-jdk=/cygdrive/c/java/jdk-17.0.13+11 \
+--with-jtreg=/cygdrive/c/java/jtreg
+```
+
+```sh
+make all; make test-tier1
+```
+
+## OpenJDK 16 (16.0.2-ga)
+
+Visual Studioのビルド環境の検出に失敗して`bash configure`自体が失敗します。
+
+```sh
+bash configure \
+--with-boot-jdk=/cygdrive/c/java/jdk-16.0.2+7 \
+--with-jtreg=/cygdrive/c/java/jtreg
+```
+
+```text
+configure: Using default toolchain microsoft (Microsoft Visual Studio)
+configure: error: Cannot locate a valid Visual Studio installation
+configure exiting with result code 1
+```
+
+## OpenJDK 11 (11.0.26-3)
+
+11はまだビルドが通ります。
+いつまで使う気なんでしょうね
+
+```sh
+bash configure \
+--with-boot-jdk=/cygdrive/c/java/jdk-11.0.25+9 \
+--with-jtreg=/cygdrive/c/java/jtreg
+```
+
+```sh
+make all; make test-tier1
+```
+
+## OpenJDK 8 (jdk8u442-b04)
+
+`u442`ってもはや何なんだよって感じです
+
+```sh
+bash configure \
+--with-boot-jdk=/cygdrive/c/java/jdk8u432-b06 \
+--with-jtreg=/cygdrive/c/java/jtreg \
+--with-freetype-src=/cygdrive/c/src/freetype-2.5.3
+```
+
+`bash configure`までは通るけど、ビルドはコケます。
+
+```sh
+make all
 ```
 
 おわり
