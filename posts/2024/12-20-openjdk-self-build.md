@@ -175,7 +175,7 @@ bash configure \
 ```
 
 ```sh
-make all; make test-tier1
+make all; make run-test-tier1
 ```
 
 ## OpenJDK 8 (jdk8u442-b04)
