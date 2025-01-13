@@ -3,6 +3,7 @@ title: 生成AIは業務アプリの夢を見るか
 description: 生成AIで業務アプリを生成する世界の考察です。
 date: 2025-01-04
 lastModified: 2025-01-04
+draft: true
 tags: 
   - poem
 ---
