@@ -1,0 +1,1039 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<feed xmlns="http://www.w3.org/2005/Atom">
+	<title>レンコン畑でつかまえて</title>
+	<subtitle></subtitle>
+	<link href="https://www.jyuch.dev/feed.xml" rel="self"/>
+	<link href="https://www.jyuch.dev/"/>
+	
+	<updated>2025-05-17T08:20:59Z</updated>
+	<id>https://www.jyuch.dev/</id>
+	<author>
+		<name>jyuch</name>
+		<email></email>
+	</author>
+	<entry>
+		<title>メインPCを更新したお話</title>
+		<link href="https://www.jyuch.dev/posts/2025/05-10-new-main-pc/"/>
+		<updated>2025-05-15T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/05-10-new-main-pc/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;メインPCを更新したのでそのことについてです。&lt;/p&gt;
+&lt;h1&gt;モチベーション&lt;/h1&gt;
+&lt;p&gt;使っているメインPCは大体7年前位に購入したもので、以下の問題を抱えていました。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Windows 11のサポート対象外で2025年10月以降は実質使えなくなる&lt;/li&gt;
+&lt;li&gt;検証用に仮想マシンをいくつか立ち上げた時に、CPUの処理が明らかに追いついていない時がある&lt;/li&gt;
+&lt;li&gt;モンハンワイルズが動かない&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;特にWindows 11のサポート対象外は流石にまずいので、直前に慌てるよりは少し余裕を持って更新しようというのが動機となります。&lt;/p&gt;
+&lt;h1&gt;次期PCに求める要件&lt;/h1&gt;
+&lt;p&gt;現行PCは主に検証用に仮想マシンを立てる使い方をしており、その使い方は踏襲します。
+また、瞬発的な処理能力も欲しいところです。&lt;/p&gt;
+&lt;p&gt;そのため、次期PCに求める要件は以下の通りとなりました。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;CPU
+&lt;ul&gt;
+&lt;li&gt;なるべく高い周波数で動作するマルチコアなCPUを採用する&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;メモリ
+&lt;ul&gt;
+&lt;li&gt;現行PCの倍となる128GBを最低とする&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;ストレージ
+&lt;ul&gt;
+&lt;li&gt;OSを格納する高速で動作するプライマリストレージ&lt;/li&gt;
+&lt;li&gt;仮想マシンを格納するSSDベースのセカンダリストレージ&lt;/li&gt;
+&lt;li&gt;アーカイブを格納するHDDベースの大容量ストレージ&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;こんな変な構成のPCは市販どころかBTOでも組めなさそうなので当然のように自作することになります。&lt;/p&gt;
+&lt;h1&gt;選定パーツ&lt;/h1&gt;
+&lt;p&gt;要件が固まったらパーツを選定していきます。&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;コンポーネント&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;メーカー&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;モデル&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;CPU&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;AMD&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Ryzen™ 9 9950X&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;メモリ&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Crucial&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Pro 128GB Kit (64GBx2) DDR5-5600 UDIMM&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;プライマリストレージ&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Sandisk&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;WD_BLACK SN850X 1TB&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;セカンダリストレージ&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Solidigm&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;P41 Plus 2TB&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;マザーボード&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;ASUS&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Prime X870-P WIFI-CSM&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;CPUクーラー&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;ARCTIC&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Liquid Freezer III - 360&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;PCケース&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Fractal Design&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;North XL&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;電源&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Corsair&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;RM850e&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;GPU&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;ASRock&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;RT7800XT Challenger 16GB OC&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2&gt;CPU&lt;/h2&gt;
+&lt;p&gt;最近のIntel CPUはPコアと呼ばれる高い処理能力を持つコアとEコアと呼ばれる高効率コアの二つのコアのハイブリット構成となっています。&lt;/p&gt;
+&lt;p&gt;理念としては理解できるのですが、どうやらVMWare Workstation Proでコア間のスケジューリングに問題を抱えているという話をちらっと聞いたり、私自身もその周りでトラブルを抱えたくないなぁという思いから今回はAMDのCPUを採用することとしました&lt;/p&gt;
+&lt;p&gt;特に&lt;a href=&quot;https://www.amd.com/ja/products/processors/desktops/ryzen/9000-series/amd-ryzen-9-9950x.html&quot;&gt;AMD Ryzen™ 9 9950X&lt;/a&gt;は全部Pコア、コアいっぱい、高いクロック数というバカの考えた最強のCPUを地で行っており、要件的に最も近いためこちらを採用することとします。&lt;/p&gt;
+&lt;p&gt;なお、9950X君には上位存在の9950X3Dという3D V-Cacheを積んでいるモデルもありますが、売ってないものは買えないのと、別にゲーム性能はそこまで求めてないので今回は採用しませんでした。&lt;/p&gt;
+&lt;h2&gt;メモリ&lt;/h2&gt;
+&lt;p&gt;9950XはDDR5メモリ対応なのですが、4枚刺しだとメモリクロックが下がってしまうため出来れば2枚で運用したいところです。&lt;/p&gt;
+&lt;p&gt;と思いながらネットショップを徘徊していたら&lt;a href=&quot;https://www.crucial.jp/memory/ddr5/cp2k64g56c46u5&quot;&gt;Crucial Pro 128GB Kit (64GBx2) DDR5-5600 UDIMM&lt;/a&gt;の在庫が復活していたのでお買い上げしました。&lt;/p&gt;
+&lt;h2&gt;ストレージ&lt;/h2&gt;
+&lt;p&gt;プライマリストレージとして&lt;a href=&quot;https://shop.sandisk.com/ja-jp/products/ssd/internal-ssd/wd-black-sn850x-nvme-ssd?sku=WDS100T2X0E-00BCA0&quot;&gt;Sandisk WD_BLACK SN850X 1TB&lt;/a&gt;、セカンダリストレージとして&lt;a href=&quot;https://www.solidigmtechnology.jp/products/client/plus-series/p41.html&quot;&gt;Solidigm P41 Plus 2TB&lt;/a&gt;を選択しました。&lt;/p&gt;
+&lt;p&gt;ターシャリのHDDは家で余っていた4TBのHDDをWindows記憶域で2本ミラーで束ねて使っています。&lt;/p&gt;
+&lt;h2&gt;マザーボード&lt;/h2&gt;
+&lt;p&gt;上記のCPU、メモリ、ストレージが刺さるマザーボードで必要十分な性能を持つ（と思った）&lt;a href=&quot;https://www.asus.com/jp/motherboards-components/motherboards/csm/prime-x870-p-wifi-csm/&quot;&gt;ASUS Prime X870-P WIFI-CSM&lt;/a&gt;を採用します。&lt;/p&gt;
+&lt;h2&gt;CPUクーラー&lt;/h2&gt;
+&lt;p&gt;AMDのデータシート曰く、&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Liquid cooler recommended for optimal performance&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;とのことなので、今回は簡易水冷クーラーを投入することとしました。&lt;/p&gt;
+&lt;p&gt;簡易水冷は消耗部品ということらしいので、そこそこの値段で評判のよさそうな&lt;a href=&quot;https://www.arctic.de/en/Liquid-Freezer-III-360/ACFRE00136A&quot;&gt;ARCTIC Liquid Freezer III - 360&lt;/a&gt;を採用します。&lt;/p&gt;
+&lt;p&gt;なお、このモデルはクーラーヘッドの上に周辺パーツの冷却用のファンが載っているのですが、マザーボードによっては干渉してしまうこともあるようなので事前に確認してから買うと良いと思います。&lt;/p&gt;
+&lt;p&gt;また、私が買ったときはCPUグリスのMX6が添付されていましたので、確認してから買うと無駄に別途CPUグリスを買ってしまう悲劇をさけられると思います。（1敗）&lt;/p&gt;
+&lt;h2&gt;PCケース&lt;/h2&gt;
+&lt;p&gt;今回採用した簡易水冷クーラーのラジエータサイズが360mmと大型なので、このラジエータを無理なく納められるケースとして&lt;a href=&quot;https://www.fractal-design.com/ja/products/cases/north/north-xl/chalk-white/&quot;&gt;Fractal Design North XL&lt;/a&gt;を採用しました。&lt;/p&gt;
+&lt;p&gt;見た目もいいかんじです。&lt;/p&gt;
+&lt;h2&gt;電源&lt;/h2&gt;
+&lt;p&gt;電源は今まで使ってきて安心感のあるCorsairから選びました。&lt;/p&gt;
+&lt;p&gt;多分850Wあれば足りるだろうということで&lt;a href=&quot;https://www.corsair.com/jp/ja/p/psu/cp-9020296-jp/rme-series-rm850e-fully-modular-low-noise-atx-power-supply-jp-cp-9020296-jp&quot;&gt;Corsair RM850e&lt;/a&gt;をチョイス。&lt;/p&gt;
+&lt;h2&gt;GPU&lt;/h2&gt;
+&lt;p&gt;なんとなく目についたので&lt;a href=&quot;https://asrock.com/Graphics-Card/AMD/Radeon%20RX%207800%20XT%20Challenger%2016GB%20OC/index.jp.asp&quot;&gt;ASRock RT7800XT Challenger 16GB OC&lt;/a&gt;をチョイス。&lt;/p&gt;
+&lt;p&gt;Challengerとはどの立ち位置のブランドなのか、オーバークロックだと何が変わるのか、何も分からずに使っています。&lt;/p&gt;
+&lt;p&gt;モンハンが動けばいいんすよ&lt;/p&gt;
+&lt;h1&gt;組み立て&lt;/h1&gt;
+&lt;p&gt;容量の大きなメモリを積むと初回起動時に画面が表示されるまで時間が掛かると言われていましたが、この構成ではたしか10分位で最初の表示が行われていたと思います。&lt;/p&gt;
+&lt;p&gt;North XLはサイズは大きいですが内部の容積も大きく、大型の簡易水冷でも無理なく取り回せます。
+そのため、初めて簡易水冷で組みましたがとくにトラブルも無く組むことが出来ました。&lt;/p&gt;
+&lt;h1&gt;インストール&lt;/h1&gt;
+&lt;p&gt;あとは普通にWindowsをインストールしてドライバをインストールすれば完了です。&lt;/p&gt;
+&lt;p&gt;ドライバはASUS DriverHubというものでマザーボード用ドライバをインストールした後、AMD Software: Adrenalin Edition経由でチップセットドライバとグラボドライバを更新しました。
+これが正しい手順かどうかはよくわかっていません。&lt;/p&gt;
+&lt;h1&gt;ベンチマーク&lt;/h1&gt;
+&lt;p&gt;最後に性能を測ります。&lt;/p&gt;
+&lt;p&gt;よくあるのはCinebenchですが、まぁ自作のツールでベンチマークしてもいいよねって事で&lt;a href=&quot;https://www.jyuch.dev/posts/2025/01-02-shrink-image-size-using-rust/&quot;&gt;自作の画像変換ツール&lt;/a&gt;の処理時間で確認してみましょう。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-txt&quot;&gt;&amp;gt; Measure-Command { cwebp.exe -i .&#92;input&#92; -o .&#92;output&#92; }
+
+
+Days              : 0
+Hours             : 0
+Minutes           : 10
+Seconds           : 52
+Milliseconds      : 837
+Ticks             : 6528379424
+TotalDays         : 0.0075559947037037
+TotalHours        : 0.181343872888889
+TotalMinutes      : 10.8806323733333
+TotalSeconds      : 652.8379424
+TotalMilliseconds : 652837.9424
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-txt&quot;&gt;&amp;gt; Measure-Command { cwebp.exe -i .&#92;input&#92; -o .&#92;output&#92; }
+
+
+Days              : 0
+Hours             : 0
+Minutes           : 3
+Seconds           : 2
+Milliseconds      : 843
+Ticks             : 1828432412
+TotalDays         : 0.00211624121759259
+TotalHours        : 0.0507897892222222
+TotalMinutes      : 3.04738735333333
+TotalSeconds      : 182.8432412
+TotalMilliseconds : 182843.2412
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;同じ画像セットに対して処理を行いました。
+11分から3分と大体3.6倍の性能向上となっています。&lt;/p&gt;
+&lt;p&gt;なお、9950Xの方はCPUの使用率が30～50%のあたりをうろうろしていました。
+この辺は私の作りこみが甘い部分があるのでもう少し頑張ればもっと性能差は開きそうです。&lt;/p&gt;
+&lt;h1&gt;おわりに&lt;/h1&gt;
+&lt;p&gt;これからはこのメインPC君にいろいろ頑張ってもらいましょう。&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>Rustでも画像がカラーかモノクロか判別したい</title>
+		<link href="https://www.jyuch.dev/posts/2025/01-19-determine-color-or-monochrome/"/>
+		<updated>2025-01-19T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/01-19-determine-color-or-monochrome/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;&lt;a href=&quot;https://www.jyuch.dev/posts/2025/01-02-shrink-image-size-using-rust/&quot;&gt;前回&lt;/a&gt;では画像をavifにして縮小する方法を確認したのですが、よくよく確認してみると明らかにモノクロ画像なのにカラープロファイルで保存されている画像とかもちらほらあったんですよね。&lt;/p&gt;
+&lt;p&gt;じゃあカラー画像かモノクロ画像か判別して、モノクロならビット深度を8bitに落とせばもっとサイズを縮小出来るのではということでカラーかモノクロか判別する方法を確認してみました。&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://takuya-1st.hatenablog.jp/entry/2023/04/05/230317&quot;&gt;画像が、白黒かカラーか判定する。(白黒に近いスキャン画像を判定する）- それマグで！&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;HSV（HSB）色空間に変換して、S(Saturation)×V(Value)の値を閾値で2値化してその平均値で判定すればうまく行くとのことです。&lt;/p&gt;
+&lt;h1&gt;HSV色空間&lt;/h1&gt;
+&lt;p&gt;さて、前回に引き続き画像ライブラリにはimage-rsを使っているので、HSV色空間に変換するメソッドがあれば一発で終わります。ありませんでした&lt;/p&gt;
+&lt;p&gt;ただ、RGBからHSVに変換するのはそんなに難しくないので、ここでは愚直に実装していきます。&lt;/p&gt;
+&lt;p&gt;RGB用に以下の&lt;code&gt;max&lt;/code&gt;、&lt;code&gt;min&lt;/code&gt;なヘルパメソッドを定義して、&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;fn max(r: u8, g: u8, b: u8) -&amp;gt; u8 {
+    if r &amp;gt; g &amp;amp;&amp;amp; r &amp;gt; b {
+        r
+    } else if g &amp;gt; b &amp;amp;&amp;amp; g &amp;gt; r {
+        g
+    } else {
+        b
+    }
+}
+
+fn min(r: u8, g: u8, b: u8) -&amp;gt; u8 {
+    if r &amp;lt; g &amp;amp;&amp;amp; r &amp;lt; b {
+        r
+    } else if g &amp;lt; b &amp;amp;&amp;amp; g &amp;lt; r {
+        g
+    } else {
+        b
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;定義通りにSとVを計算するメソッドを実装します。
+なお、値域は文献によってまちまちなのですが、ここでは0から255までとして計算しています。&lt;/p&gt;
+&lt;p&gt;また、今回の計算ではHは使用しないので実装していません。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;fn v(r: u8, g: u8, b: u8) -&amp;gt; u8 {
+    max(r, g, b)
+}
+
+fn s(r: u8, g: u8, b: u8) -&amp;gt; u8 {
+    let v = v(r, g, b);
+
+    if v == 0 {
+        0
+    } else {
+        (255f64 * ((max(r, g, b) as f64 - min(r, g, b) as f64) / max(r, g, b) as f64)) as u8
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h1&gt;判定&lt;/h1&gt;
+&lt;p&gt;あとは画像を読み込んで1ピクセル毎にHSV色空間に変換して閾値から2値化して平均すれば完了です。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;fn is_monochrome(img: &amp;amp;DynamicImage) -&amp;gt; f64 {
+    let img = img.clone().into_rgb8();
+    let mut sum = 0u32;
+    let mut n = 0u32;
+
+    // 2値化するときの閾値（今回は10%を使用している）
+    let threshold = (256f64 * 256f64 * 0.1) as u32;
+    for (_, _, pixel) in img.enumerate_pixels() {
+        let r = pixel.0[0];
+        let g = pixel.0[1];
+        let b = pixel.0[2];
+
+        // HSV色空間に変換
+        let v = v(r, g, b);
+        let s = s(r, g, b);
+        let sv = s as u32 * v as u32;
+
+        // 2値化
+        if sv &amp;gt; threshold {
+            sum += 1;
+        }
+        n += 1;
+    }
+    
+    // 平均を計算
+    let mean = sum as f64 / n as f64;
+    mean
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;結果が0よりも大きければカラー、0ならモノクロと判別出来ると思います。たぶん&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/jyuch/is-monochrome&quot;&gt;is-monochrome&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>RustでもAVIFフォーマットに変換して画像サイズを縮小したい</title>
+		<link href="https://www.jyuch.dev/posts/2025/01-02-shrink-image-size-using-rust/"/>
+		<updated>2025-01-02T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/01-02-shrink-image-size-using-rust/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;Rustとimage-rsを使ってjpeg画像などをAVIFフォーマットに変換して画像サイズを縮小するツールを作成したのでそれについてです。&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/jyuch/cwebp&quot;&gt;cwebp&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;自炊したスキャン画像があり、普段はPCで参照していたのでWindows標準の画像ビューワで見ていました。
+しかし、諸般の事情で手元のiPhoneでも見れたほうがいいよねってことで画像ファイルを本ごとにブラウザで見れるようにSSGを使ってHTMLに起こしました。&lt;/p&gt;
+&lt;p&gt;宅内からでしか参照しないのでオリジナルサイズの画像をそのまま貼り付けても良かったのですが、画像数が32000程度あり取り回しやサーバへの転送でつらみポイントが高めだったので、ナウでヤングなファイルフォーマットを使って取り回しを良くしたいというのが作った動機です。&lt;/p&gt;
+&lt;p&gt;また、単純に画像を変換するだけならImageMagicを使えば良いと思いますが、画像を保存しているディレクトリ構造を保ったまま一括で変換してほしかったのでツールを作成しました。&lt;/p&gt;
+&lt;p&gt;最初はWebPフォーマットにしようとしましたが、ビット深度を落としてもオリジナルサイズの2倍くらいのサイズになってしまうのでAVIFフォーマットに切り替えたという経緯があります。&lt;/p&gt;
+&lt;h1&gt;使用ライブラリ&lt;/h1&gt;
+&lt;p&gt;Rustでの画像操作ライブラリは&lt;a href=&quot;https://github.com/image-rs/image&quot;&gt;image-rs&lt;/a&gt;を使っています。&lt;/p&gt;
+&lt;p&gt;オリジナルファイルは残す前提なので、ファイルサイズを縮小することを優先して変換を掛けています。&lt;/p&gt;
+&lt;p&gt;書籍系の画像なのでアルファチャネルは不要で、カラーはRGBでビット深度が24bit、モノクロははビット深度を8bitに落としています。&lt;/p&gt;
+&lt;p&gt;image-rsは書き出し時に指定するパスのファイルの拡張子からフォーマットを決めてくれるので、出力パスを決定する段階で拡張子&lt;code&gt;.avif&lt;/code&gt;を付けています。&lt;/p&gt;
+&lt;p&gt;また、これは完全に私の管理が悪いのですが、たまに拡張子とファイルフォーマットが一致していないファイルがあったりします。
+そのため、画像を読み込むときは拡張子から読み込むフォーマットを決めているのではなく、ファイルから読み込んだ中身からファイルフォーマットを類推させています。&lt;/p&gt;
+&lt;p&gt;あとは、画像サイズをコマンドラインパラメータから指定できるようにし、画像サイズの縮小も同時に行っています。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rs&quot;&gt;fn convert(
+    input: impl AsRef&amp;lt;Path&amp;gt;,
+    output: impl AsRef&amp;lt;Path&amp;gt;,
+    width: Option&amp;lt;u32&amp;gt;,
+    height: Option&amp;lt;u32&amp;gt;,
+) -&amp;gt; anyhow::Result&amp;lt;()&amp;gt; {
+    let content = fs::read(&amp;amp;input)?;
+    let img = ImageReader::new(Cursor::new(&amp;amp;content))
+        .with_guessed_format()?
+        .decode()?;
+
+    let (cur_width, cur_height) = img.dimensions();
+    let new_width = width.unwrap_or(cur_width);
+    let new_height = height.unwrap_or(cur_height);
+    let img = img.resize(new_width, new_height, FilterType::Lanczos3);
+
+    let img: DynamicImage = match img.color() {
+        ColorType::L8 | ColorType::La8 | ColorType::L16 | ColorType::La16 =&amp;gt; {
+            DynamicImage::from(img.into_luma8())
+        }
+        ColorType::Rgb8
+        | ColorType::Rgba8
+        | ColorType::Rgb16
+        | ColorType::Rgba16
+        | ColorType::Rgb32F
+        | ColorType::Rgba32F =&amp;gt; DynamicImage::from(img.into_rgb8()),
+        _ =&amp;gt; unreachable!(),
+    };
+
+    img.save(output)?;
+    Ok(())
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h1&gt;縮小比と処理時間&lt;/h1&gt;
+&lt;p&gt;AVIFフォーマットの画像縮小は効果てきめんで、カラーならオリジナル比で40%、モノクロで60%くらいまで縮んでくれます。&lt;/p&gt;
+&lt;p&gt;ただし、処理時間がWebPフォーマットなどの比べるととても遅く、1ファイル当たり平均で811msくらい掛かります。
+PNGなどが大体14mくらいなので、まぁ、うん、その、ねぇ・・・&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>2024年の振り返りとか</title>
+		<link href="https://www.jyuch.dev/posts/2024/12-31-look-back-2024/"/>
+		<updated>2024-12-31T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2024/12-31-look-back-2024/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;2024年の振り返りです。&lt;/p&gt;
+&lt;h1&gt;Rust&lt;/h1&gt;
+&lt;p&gt;プライベートでもあまり書けていませんでしたが、&lt;a href=&quot;https://github.com/jyuch/advoid&quot;&gt;advoid&lt;/a&gt;のようにある程度実用的なプログラムを形に出来たのは良かったのかもしれません。
+advoidは宅内のあまり重要ではない端末に対してDNSを提供していますが、今のところ問題を起こさずに安定して動いています。&lt;/p&gt;
+&lt;p&gt;来年はRustをメインで書けるようなお仕事を探してみても良いのかなと思っています。&lt;/p&gt;
+&lt;h1&gt;資格とか&lt;/h1&gt;
+&lt;p&gt;&lt;a href=&quot;https://www.jyuch.dev/posts/2024/12-28-2024-autumn-ap/&quot;&gt;今年は勘違いから応用情報を受験&lt;/a&gt;しました。&lt;/p&gt;
+&lt;p&gt;勘違いで受験したのはもう少し確認しろよの一言ですが、会場の雰囲気が分かったり来年受けようと思っているネスペの午前Ⅰが免除になったので全体的には良かったのかなと思います。&lt;/p&gt;
+&lt;p&gt;ある程度の実務経験があるエンジニアならあんまり勉強しなくても合格出来ると思うので、試しに受験してみるのもいいかもしれません。&lt;/p&gt;
+&lt;h1&gt;ブログ&lt;/h1&gt;
+&lt;p&gt;今のドメインに移行して2年位まともにGoogleにインデックスされませんでしたが、最近インデックスされるようになりました。
+特に何かをいじったわけではないので、インデックスされない期間が終わったということなんだと思います。&lt;/p&gt;
+&lt;p&gt;だから何だというわけではないのですが、今後は検索に引っかかるようになるので私がうれしいというお話です。&lt;/p&gt;
+&lt;p&gt;あと、最近は記事をあまり書いてこなかったのですが、そのせいか昔に比べて文章を書く能力が低下している気がしています。
+接続詞や言い回しがパッと出てこないんですよね。&lt;/p&gt;
+&lt;p&gt;なので、今年は記事を書くペースを上げていきたいです。&lt;/p&gt;
+&lt;h1&gt;おわりに&lt;/h1&gt;
+&lt;p&gt;来年も良い感じに頑張りたいと思います。&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>応用情報技術者試験に合格していたお話</title>
+		<link href="https://www.jyuch.dev/posts/2024/12-28-2024-autumn-ap/"/>
+		<updated>2024-12-28T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2024/12-28-2024-autumn-ap/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;2024年秋の応用情報技術者試験を受験して合格していたのでそのお話です。&lt;/p&gt;
+&lt;p&gt;それなりに実務経験を積んではいるがめんどくさくて基本情報や応用情報を今まで受けてこなかった人が、気まぐれや必要に迫られて受けることになった際に参考になるように記録として残しておこうと思います。&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2024/12-28-2024-autumn-ap/result.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;h1&gt;受験した経緯&lt;/h1&gt;
+&lt;p&gt;私の本業はアプリケーション開発なのですが、仕事ではネットワークに触れる機会がそれなりに多いという謎の経歴を持っています。
+それじゃということで勉強がてらネットワークスペシャリストが欲しいなと思っていました。&lt;/p&gt;
+&lt;p&gt;それで私は何を勘違いしていたのか、高度情報処理技術者試験は応用情報技術者が前提になっていると勘違いしていました。
+多分応用情報を持っていれば午前Ⅰの試験が免除になるという話と混ざっていたのだと思います。&lt;/p&gt;
+&lt;p&gt;そんなこともあり、ロクに調べることもなく応用情報技術者試験を申し込んでしまったというのが事の経緯となります。&lt;/p&gt;
+&lt;h1&gt;試験会場の雰囲気&lt;/h1&gt;
+&lt;p&gt;私はつくばの国際会議場で受験したので、他の会場のだと勝手が違うかもしれませんので最初に断っておきます。&lt;/p&gt;
+&lt;p&gt;会場には受付があるのかなと思っていましたが、「APはあちら」位の案内が貼ってあるだけでした。&lt;/p&gt;
+&lt;p&gt;また、試験室には試験開始30分前？位までは入れないので、あまり早く到着しても無駄にソワソワするだけです。
+入室できる時間になると案内がされるので、受験票の番号にしたがって部屋に入って指定された席に着くという感じです。&lt;/p&gt;
+&lt;p&gt;なお、ホテルを借りた会場では机と椅子の高さが合ってないみたいなツイートがありましたが、普通の机と普通の椅子で特にそんなことはなく、さすが国際会議場といったところです。&lt;/p&gt;
+&lt;p&gt;コンビニが微妙に遠いので、お昼ご飯はあらかじめ買っておいたほうが無難です。
+あと、午後試験の直前はトイレがめっちゃ混みます。気を付けましょう&lt;/p&gt;
+&lt;h1&gt;試験の難易度&lt;/h1&gt;
+&lt;h2&gt;午前試験&lt;/h2&gt;
+&lt;p&gt;範囲が広いので過去問をまんべんなくやっておいたほうがいいかもしれません。
+ただし、選択式なのでその分野を深く知っておくというよりかは単語とその意味を知っているか位の感じで良いと思います。
+まぁ、参考書を1～2周して、ちょっと苦手な部分を重点的にやっておく位で大丈夫です。&lt;/p&gt;
+&lt;p&gt;また、割と時流を抑えているようで、2024年の秋試験ではオブジェクトストレージやLLMのファインチューニングを問う問題が出ていました。
+対して、昔のメインフレームの文脈で使われることの多かったデュプレックスシステムやデュアルシステムは出てこなかった気がします。
+今後はクラウド系の知識を問う問題が増えると思います。&lt;/p&gt;
+&lt;p&gt;待ち行列や2分探索木、ハッシュ関数や逆ポーランド記法などの鉄板はやっておいたほうが良いです。出ます&lt;/p&gt;
+&lt;h2&gt;午後試験&lt;/h2&gt;
+&lt;p&gt;カテゴリが選択式で範囲が狭まる分、午前よりは深い理解を問われます。&lt;/p&gt;
+&lt;p&gt;とはいえ、セキュリティならパスワードのハッシュ化や組み合わせの数、ネットワークならパケットフィルタやルーティングテーブルなどそのカテゴリの基本的な知識を問うレベルですのでそんなに身構えなくても良いかもです。&lt;/p&gt;
+&lt;p&gt;カテゴリは決まっているようなので、自分が得意とする分野をあらかじめ見繕って勉強しておけば良いんじゃないかなと思います。&lt;/p&gt;
+&lt;p&gt;あと、漢字〇文字で書け系の問題も割と出ます。
+私は「多層防御」の「御」を思い出せずに帰りの迎えの車の中で思い出しました。&lt;/p&gt;
+&lt;p&gt;また、午後試験は割と焦りやすいので落ち着いて問題文を読むようにしたほうが良いですね。
+私も焦って解いて見直しで結構手直しをすることが多かったです。&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>WindowsでもOpenJDKを野良ビルドしたい</title>
+		<link href="https://www.jyuch.dev/posts/2024/12-20-openjdk-self-build/"/>
+		<updated>2024-12-20T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2024/12-20-openjdk-self-build/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;OpenJDKの中身をいじって検証する必要があったので、WindowsでOpenJDKを野良ビルドする方法を確認してみました。&lt;/p&gt;
+&lt;p&gt;最新のバージョンなら&lt;a href=&quot;https://openjdk.org/groups/build/doc/building.html&quot;&gt;OpenJDKの公式Wikiのビルドのページ&lt;/a&gt;を参照すればいいですが、古いバージョンはリポジトリ内の&lt;code&gt;docs&lt;/code&gt;フォルダの中身を確認する必要があります。（1敗）&lt;/p&gt;
+&lt;p&gt;また、基本的にバージョンが下るほどビルド難易度が上がっていきます。&lt;/p&gt;
+&lt;p&gt;古いバージョンだと過去のVisual StudioとかWindowsバージョンが必要っぽいですが、流石に個人でVisual Studio Subscriptionを契約していないので基本的にWindows 11 + Visual Studio 2022でビルドしていきます。&lt;/p&gt;
+&lt;h1&gt;必要なもの&lt;/h1&gt;
+&lt;p&gt;OpenJDKの公式リファレンス曰く、英語版のWindowsのみを公式でサポートしているらしいです。
+そのため、何らかの合法的な手段で英語版のWindowsを調達するか、ロケールを英語に変更してください。&lt;/p&gt;
+&lt;p&gt;そうしたら以下の開発ツールをインストールします。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Visual Studio 2022
+&lt;ul&gt;
+&lt;li&gt;「Desktop development with C++」ワークロード&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;Cygwin
+&lt;ul&gt;
+&lt;li&gt;autoconf&lt;/li&gt;
+&lt;li&gt;make&lt;/li&gt;
+&lt;li&gt;zip&lt;/li&gt;
+&lt;li&gt;unzip&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;git（GitHubからソースをクローンしてくるなら）&lt;/li&gt;
+&lt;li&gt;ビルド済みのJDK（ビルドしたいOpenJDKのバージョンかその一つ前のバージョン）&lt;/li&gt;
+&lt;li&gt;JTReg（リグレッションテストを回すなら）&lt;/li&gt;
+&lt;li&gt;googletest（hotspotのテストを回すなら）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;ソースをzipで落としてくるのであれば、ファイル数がとても多いので7zipなどのアーカイバを使って解凍したほうがいいかもしれません。&lt;/p&gt;
+&lt;h1&gt;ビルド&lt;/h1&gt;
+&lt;p&gt;どのバージョンでも&lt;code&gt;build&#92;windows-x86_64-server-release&#92;jdk&lt;/code&gt;にバイナリが吐かれています。&lt;/p&gt;
+&lt;p&gt;大体どのバージョンでも手元のマシンだとビルドで30分位、&lt;code&gt;test-tier1&lt;/code&gt;で2時間位掛かるのでゆっくりしていってね！！！&lt;/p&gt;
+&lt;p&gt;あと、ビルドに時間が掛かるからって調子に乗って複数バージョンの同時ビルドを流すと、たまにテストがタイムアウトしてError扱いになるので注意しましょう。（4敗）&lt;/p&gt;
+&lt;h2&gt;OpenJDK 23 (23.0.1-11)&lt;/h2&gt;
+&lt;p&gt;最新ならとっても簡単です。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;bash configure &#92;
+--with-boot-jdk=/cygdrive/c/java/jdk-23.0.1+11 &#92;
+--with-jtreg=/cygdrive/c/java/jtreg &#92;
+--with-gtest=/cygdrive/c/src/googletest-1.14.0
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;make all; make test-tier1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;OpenJDK 22 (22.0.2-9)&lt;/h2&gt;
+&lt;p&gt;22までならなんの捻りもなくビルドが通ります。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;bash configure &#92;
+--with-boot-jdk=/cygdrive/c/java/jdk-22.0.2+9 &#92;
+--with-jtreg=/cygdrive/c/java/jtreg &#92;
+--with-gtest=/cygdrive/c/src/googletest-1.14.0
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;make all; make test-tier1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;OpenJDK 21 (21.0.6-6)&lt;/h2&gt;
+&lt;p&gt;最新のLTSですが、googletestを有効にするとビルドに失敗するようになります。
+ここから雲行きが怪しくなります。&lt;/p&gt;
+&lt;p&gt;とりあえずバイナリが欲しいので、googletestを無効にしてビルドを進めます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt; bash configure &#92;
+--with-boot-jdk=/cygdrive/c/java/jdk-21.0.5+11 &#92;
+--with-jtreg=/cygdrive/c/java/jtreg
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;googletestを無効化したせいでいくつかのhotspotテストが失敗として報告されますが、動くので多分問題ないでしょう。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;make all; make test-tier1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;OpenJDK 20 (20.0.2-ga)&lt;/h2&gt;
+&lt;p&gt;ビルド中にワーニング出てきて若干不穏な感じになりますが、まぁビルドが通るので良しとしましょう。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;bash configure &#92;
+--with-boot-jdk=/cygdrive/c/java/jdk-20.0.2+9 &#92;
+--with-jtreg=/cygdrive/c/java/jtreg
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;20からgoogletest起因以外でテストが1件失敗し始めます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;make all; make test-tier1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;OpenJDK 19 (19.0.2-ga)&lt;/h2&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;bash configure &#92;
+--with-boot-jdk/cygdrive/c/java/jdk-19.0.2+7 &#92;
+--with-jtreg=/cygdrive/c/java/jtreg
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;make all; make test-tier1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;OpenJDK 18 (18.0.2.1-0)&lt;/h2&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;bash configure &#92;
+--with-boot-jdk=/cygdrive/c/java/jdk-18.0.2.1+1 &#92;
+--with-jtreg=/cygdrive/c/java/jtreg
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;make all; make test-tier1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;OpenJDK 17 (17.0.14-6)&lt;/h2&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;bash configure &#92;
+--with-boot-jdk=/cygdrive/c/java/jdk-17.0.13+11 &#92;
+--with-jtreg=/cygdrive/c/java/jtreg
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;make all; make test-tier1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;OpenJDK 16 (16.0.2-ga)&lt;/h2&gt;
+&lt;p&gt;Visual Studioのビルド環境の検出に失敗して&lt;code&gt;bash configure&lt;/code&gt;自体が失敗します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;bash configure &#92;
+--with-boot-jdk=/cygdrive/c/java/jdk-16.0.2+7 &#92;
+--with-jtreg=/cygdrive/c/java/jtreg
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-text&quot;&gt;configure: Using default toolchain microsoft (Microsoft Visual Studio)
+configure: error: Cannot locate a valid Visual Studio installation
+configure exiting with result code 1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;OpenJDK 11 (11.0.26-3)&lt;/h2&gt;
+&lt;p&gt;11はまだビルドが通ります。
+いつまで使う気なんでしょうね&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;bash configure &#92;
+--with-boot-jdk=/cygdrive/c/java/jdk-11.0.25+9 &#92;
+--with-jtreg=/cygdrive/c/java/jtreg
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;make all; make run-test-tier1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;OpenJDK 8 (jdk8u442-b04)&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;u442&lt;/code&gt;ってもはや何なんだよって感じです&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;bash configure &#92;
+--with-boot-jdk=/cygdrive/c/java/jdk8u432-b06 &#92;
+--with-jtreg=/cygdrive/c/java/jtreg &#92;
+--with-freetype-src=/cygdrive/c/src/freetype-2.5.3
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;bash configure&lt;/code&gt;までは通るけど、ビルドはコケます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;make all
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>Docker Buildxでもキャッシュしたい</title>
+		<link href="https://www.jyuch.dev/posts/2024/09-14-docker-cache/"/>
+		<updated>2024-09-14T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2024/09-14-docker-cache/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;しばらくぶりにDockerに触ったらなんかいろいろとキャッシュ周りが変わっていたのでそれについてです。&lt;/p&gt;
+&lt;h1&gt;Buildx&lt;/h1&gt;
+&lt;p&gt;どうも最近のDockerはMoby BuildKitを&lt;code&gt;docker&lt;/code&gt;コマンドから透過的に扱えるようになったようです。
+そして、BuildKitをDockerから使うための拡張がBuildxです。&lt;/p&gt;
+&lt;p&gt;BuildKit君はいい感じにキャッシュを扱えるようなので、その辺を確認してみましょう。&lt;/p&gt;
+&lt;h1&gt;パッケージマネージャ&lt;/h1&gt;
+&lt;h2&gt;APT&lt;/h2&gt;
+&lt;p&gt;昔は&lt;code&gt;apt-get&lt;/code&gt;コマンドを鬼のように&lt;code&gt;&amp;amp;&amp;amp;&lt;/code&gt;で連結して、最後に&lt;code&gt;rm -rf /var/lib/apt/lists/*&lt;/code&gt;でキャッシュファイルを消し飛ばしてイメージをコンパクションするのがノウハウでした。&lt;/p&gt;
+&lt;p&gt;そうすると、イメージサイズは小さくなりますが毎回パッケージをダウンロードしてくることになるので、ビルド時間が伸びるという欠点がありました。&lt;/p&gt;
+&lt;p&gt;BuildKitは特定のディレクトリをキャッシュとしてマウントすることで、イメージの再ビルド時にそのディレクトリを復元することができます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-Dockerfile&quot;&gt;FROM debian:bookworm
+
+RUN rm -f /etc/apt/apt.conf.d/docker-clean; &#92;
+    echo &#39;Binary::apt::APT::Keep-Downloaded-Packages &amp;quot;true&amp;quot;;&#39; &#92;
+      &amp;gt; /etc/apt/apt.conf.d/keep-cache
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked &#92;
+    --mount=type=cache,target=/var/lib/apt,sharing=locked &#92;
+    set -eux; &#92;
+    apt-get update; &#92;
+    apt-get install -y --no-install-recommends &#92;
+      sl;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;apt-get&lt;/code&gt;のタイミングでリポジトリキャッシュを&lt;code&gt;cache&lt;/code&gt;タイプでマウントしています。
+こうすることで2回目以降は普通の&lt;code&gt;apt&lt;/code&gt;のようにパッケージキャッシュを使ってくれるようです。&lt;/p&gt;
+&lt;p&gt;ところで、初段のステージで&lt;code&gt;/etc/apt/apt.conf.d/docker-clean&lt;/code&gt;を消し去ってますね。&lt;/p&gt;
+&lt;p&gt;Dockerだとキャッシュが刺さってイメージが肥大化するから&lt;code&gt;apt&lt;/code&gt;の最後にキャッシュを消し飛ばすようにしている設定ファイルのようです。&lt;/p&gt;
+&lt;p&gt;じゃあ何すか&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;rm -rf /var/lib/apt/lists/*&lt;/code&gt;は無駄だったって事すか&lt;/p&gt;
+&lt;h2&gt;DNF&lt;/h2&gt;
+&lt;p&gt;DNF君も基本的には同じです。&lt;/p&gt;
+&lt;p&gt;Amazon Linux 2023のベースイメージではダウンロードキャッシュをしないようにしていたので、ダウンロードキャッシュをする設定を挟んでから&lt;code&gt;dnf install&lt;/code&gt;します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-Dockerfile&quot;&gt;FROM amazonlinux:2023
+
+RUN echo &amp;quot;keepcache=True&amp;quot; &amp;gt;&amp;gt; /etc/dnf/dnf.conf
+
+RUN --mount=type=cache,target=/var/cache/dnf &#92;
+    --mount=type=cache,target=/var/lib/dnf &#92;
+    dnf install -y &#92;
+      gcc gcr lvm2 clang
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;YUM&lt;/h2&gt;
+&lt;p&gt;CentOS7がEoLを迎えてもう&lt;code&gt;yum&lt;/code&gt;コマンドを打つ機会はない。そんなふうに考えていた時期が俺にもありました&lt;/p&gt;
+&lt;p&gt;AWS Lambdaの（少なくともPythonの）ベースイメージがAmazon Linuxが2なんですよね。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-Dockerfile&quot;&gt;FROM amazonlinux:2
+
+RUN sed -i -e &#39;s/keepcache=0/keepcache=1/&#39; /etc/yum.conf
+
+RUN --mount=type=cache,target=/var/cache/yum &#92;
+    yum install -y &#92;
+      gcc gcr lvm2 clang
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h1&gt;ビルドシステム&lt;/h1&gt;
+&lt;h2&gt;Rust&lt;/h2&gt;
+&lt;p&gt;ビルド激重Rust君です。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-Dockerfile&quot;&gt;FROM rust:1.81.0-slim AS build
+
+WORKDIR /app
+
+RUN --mount=type=bind,source=src,target=src &#92;
+    --mount=type=bind,source=Cargo.toml,target=Cargo.toml &#92;
+    --mount=type=bind,source=Cargo.lock,target=Cargo.lock &#92;
+    --mount=type=cache,target=/app/target/ &#92;
+    --mount=type=cache,target=/usr/local/cargo/git/db &#92;
+    --mount=type=cache,target=/usr/local/cargo/registry &#92;
+    set -eux; &#92;
+    cargo build --locked --release; &#92;
+    cp ./target/release/hello_rust /bin/hello_rust
+
+FROM debian:stable-slim AS final
+COPY --from=build /bin/hello_rust /bin/hello_rust
+ENTRYPOINT [&amp;quot;/bin/hello_rust&amp;quot;]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;ソース類は&lt;code&gt;bind&lt;/code&gt;でマウントしてしまえばそもそもビルドステージへの転送すら不要なようです。&lt;/p&gt;
+&lt;p&gt;あとはcargoのパッケージキャッシュとビルドキャッシュを&lt;code&gt;cache&lt;/code&gt;でバインドすれば余計なパッケージの再取得やリビルドが走りません。&lt;/p&gt;
+&lt;p&gt;あとはいつものように最終的なイメージをビルドしているステージに成果物を送り込めば完了です。&lt;/p&gt;
+&lt;h2&gt;Python&lt;/h2&gt;
+&lt;p&gt;最近触っているのでまぁ一応Pythonも確認してみましょう。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-Dockerfile&quot;&gt;FROM python:3.12-bookworm
+
+RUN --mount=type=bind,source=requirements.txt,target=requirements.txt &#92;
+    --mount=type=cache,target=/root/.cache/pip &#92;
+    pip install -r requirements.txt
+
+COPY main.py .
+
+CMD [&amp;quot;python&amp;quot;, &amp;quot;main.py&amp;quot;]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Rustと同じようにパッケージマネージャのキャッシュをそのまま&lt;code&gt;cache&lt;/code&gt;でマウントするだけです。&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>Windowsでもpyenvを使いたい</title>
+		<link href="https://www.jyuch.dev/posts/2024/07-09-pyenv/"/>
+		<updated>2024-07-09T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2024/07-09-pyenv/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;Pythonの特定のバージョンをグローバルに影響させたくないのでpyenv-winを使っているのですが、セットアップをよく忘れるのでそれについてです。&lt;/p&gt;
+&lt;h1&gt;初回セットアップ&lt;/h1&gt;
+&lt;p&gt;pyenv-winをホームディレクトリにクローンします。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;git clone git@github.com:pyenv-win/pyenv-win.git .pyenv
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;そうしたら以下の環境変数を設定します。&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;環境変数&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;値&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;PYENV&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;%USERPROFILE%&#92;.pyenv&#92;pyenv-win&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;PYENV_HOME&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;%USERPROFILE%&#92;.pyenv&#92;pyenv-win&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;PYENV_ROOT&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;%USERPROFILE%&#92;.pyenv&#92;pyenv-win&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;また、以下の2つを&lt;code&gt;PAHT&lt;/code&gt;に追加します。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;%USERPROFILE%&#92;.pyenv&#92;pyenv-win&#92;bin&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;%USERPROFILE%&#92;.pyenv&#92;pyenv-win&#92;shims&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;また、「設定 &amp;gt; アプリ &amp;gt; アプリの詳細設定 &amp;gt; アプリ実行エイリアス」から&lt;code&gt;python.exe&lt;/code&gt;と&lt;code&gt;python3.exe&lt;/code&gt;をオフにします。&lt;/p&gt;
+&lt;p&gt;アプリ実行エイリアス君は再起動しないと効かないっぽいのでいったん再起動します。&lt;/p&gt;
+&lt;h1&gt;Pythonランタイムのインストール&lt;/h1&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pyenv install --list
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;でインストール可能なPythonバージョンを表示させ、&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pyenv install 3.11.9
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;でインストールします。&lt;/p&gt;
+&lt;h1&gt;ローカルフォルダのセットアップ&lt;/h1&gt;
+&lt;p&gt;ローカルフォルダで使うPythonのバージョンをセットアップします。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pyenv local 3.11.9
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;そうしたらvenv環境を作成します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;python -m venv .venv
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;venv環境を有効にします。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;.&#92;.venv&#92;Scripts&#92;Activate.ps1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;いったんpipを最新版に更新します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;python -m pip install --upgrade pip
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h1&gt;パッケージのインストール&lt;/h1&gt;
+&lt;p&gt;パッケージのインストール。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pip install polars
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;インストール済みのパッケージを出力。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pip freeze &amp;gt; requirements.txt
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;requirements.txt&lt;/code&gt;ファイルからインストール。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;pip install -r requirements.txt
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;一括アンインストール。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;python -m pip uninstall -y -r .&#92;requirements.txt
+&lt;/code&gt;&lt;/pre&gt;</content>
+	</entry>
+	<entry>
+		<title>RustでもDNSベースのアドブロッカーを実装したい</title>
+		<link href="https://www.jyuch.dev/posts/2024/06-03-advoid-dns-based-ad-blocker/"/>
+		<updated>2024-06-03T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2024/06-03-advoid-dns-based-ad-blocker/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;最近は履歴に介入したり勝手に全画面表示してくるｱﾚなWeb広告が増えてきましたよね。&lt;/p&gt;
+&lt;p&gt;というのは特に関係なく、なんとなく手持ちの知識で作れそうなのでアドブロッカーを自作しました。&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/jyuch/advoid&quot;&gt;advoid - DNS based AD blocker&lt;/a&gt;&lt;/p&gt;
+&lt;h1&gt;動作原理&lt;/h1&gt;
+&lt;p&gt;基本的な原理はフルリゾルバのクライアントの間に挟まり、広告を配信しているドメインのクエリをインターセプトして&lt;code&gt;NXDOMAIN&lt;/code&gt;を返すというよくあるものです。
+ですので、基本的には配下の端末全体で広告をブロック出来るようになります。&lt;/p&gt;
+&lt;p&gt;あくまでも上位のフルリゾルバへのクエリをフィルタリングしているだけなので、advoid自体にはキャッシュは持っていません。&lt;/p&gt;
+&lt;p&gt;また、正規の実装であれば&lt;code&gt;NXDOMAIN&lt;/code&gt;を返すときはネガティブキャッシュをさせるためにSOAレコードも返すべきです。
+しかし、フィルタリング自体はadvoidの内部で行っており、ブロック対象のレコードに対してはμsオーダーでレスポンスを返せているためわざわざSOAを上位のフルリゾルバに問い合わせるよりも空で返したほうが速いと思って返していません。&lt;/p&gt;
+&lt;h1&gt;実装コンセプト&lt;/h1&gt;
+&lt;p&gt;手軽に使えるようにバイナリのポン置きとブロックするドメインの定義ファイルだけで動作するようになっています。&lt;/p&gt;
+&lt;p&gt;実装には最近お気に入りのRustを使用しており、クエリの待ち受けやフルリゾルバへクエリをフォワーディングするのには&lt;a href=&quot;https://github.com/hickory-dns/hickory-dns&quot;&gt;hickory-dns&lt;/a&gt;を利用しています。&lt;/p&gt;
+&lt;p&gt;また、どれだけのリクエストを受け取ってどれだけブロックしたか確認できるようにPrometheusのexporterを生やしています。
+まぁ、カウンタは今のところ3つしかありませんが。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-text&quot;&gt;# TYPE dns_requests_total counter
+dns_requests_total 4149
+
+# TYPE dns_requests_block counter
+dns_requests_block 3583
+
+# TYPE dns_requests_forward counter
+dns_requests_forward 566
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;また、デバッグしているときに欲しかったのでOpenTelemetryでテレメトリを採れるようにしてあります。Jaegerとセットでどうぞ&lt;/p&gt;
+&lt;h1&gt;おわりに&lt;/h1&gt;
+&lt;p&gt;とりあえず単純なフォワーディングとフィルタリングは出来るようになったのですが、TCPフォールバックとかActive Directory配下のDynamic DNSの透過とかはまだなので追い追い実装していきます。&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>RustでもHickory DNSを使ってDNS Forwarderを実装したい</title>
+		<link href="https://www.jyuch.dev/posts/2024/04-01-dns-forwarder-using-hickory-dns/"/>
+		<updated>2024-04-01T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2024/04-01-dns-forwarder-using-hickory-dns/</id>
+		<content type="html">&lt;h1&gt;はじめに&lt;/h1&gt;
+&lt;p&gt;DNSは春の季語なので、&lt;a href=&quot;https://github.com/hickory-dns/hickory-dns&quot;&gt;Hickory DNS&lt;/a&gt;を使用してDNS Forwarderを実装する方法を確認してみました。&lt;/p&gt;
+&lt;p&gt;とにかくドキュメントの整備が追い付いていないので、困ったらソースコードを読みましょう。これがオープンソースの強みですね（）&lt;/p&gt;
+&lt;h1&gt;とりあえず適当な値を返す&lt;/h1&gt;
+&lt;p&gt;Hickory DNSでのサーバ実装は&lt;code&gt;hickory_server&lt;/code&gt;クレートで実装されています。&lt;/p&gt;
+&lt;p&gt;&lt;code&gt;hickory_server&lt;/code&gt;でのアクセスの受付は&lt;code&gt;ServerFuture&lt;/code&gt;に実装されています。
+&lt;code&gt;ServerFuture::new&lt;/code&gt;で&lt;code&gt;RequestHandler&lt;/code&gt;トレイトを受け取るので、このトレイトを実装すればとりあえずなんらかの値は返せそうです。&lt;/p&gt;
+&lt;p&gt;と思って&lt;a href=&quot;https://docs.rs/hickory-server/latest/hickory_server/server/trait.RequestHandler.html&quot;&gt;docs.rsで当該トレイトのドキュメント&lt;/a&gt;を見ると、面妖なシグネチャが現れます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;pub trait RequestHandler: Send + Sync + Unpin + &#39;static {
+    // Required method
+    fn handle_request&amp;lt;&#39;life0, &#39;life1, &#39;async_trait, R&amp;gt;(
+        &amp;amp;&#39;life0 self,
+        request: &amp;amp;&#39;life1 Request,
+        response_handle: R
+    ) -&amp;gt; Pin&amp;lt;Box&amp;lt;dyn Future&amp;lt;Output = ResponseInfo&amp;gt; + Send + &#39;async_trait&amp;gt;&amp;gt;
+       where R: &#39;async_trait + ResponseHandler,
+             Self: &#39;async_trait,
+             &#39;life0: &#39;async_trait,
+             &#39;life1: &#39;async_trait;
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;まぁ、この手のシグネチャは大体&lt;code&gt;#[async_trait::async_trait]&lt;/code&gt;で生成されているパターンが多いので、落ち着いて実装を覗いてみると以下の感じになってます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;/// Trait for handling incoming requests, and providing a message response.
+#[async_trait::async_trait]
+pub trait RequestHandler: Send + Sync + Unpin + &#39;static {
+    /// Determines what needs to happen given the type of request, i.e. Query or Update.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - the requested action to perform.
+    /// * `response_handle` - handle to which a return message should be sent
+    async fn handle_request&amp;lt;R: ResponseHandler&amp;gt;(
+        &amp;amp;self,
+        request: &amp;amp;Request,
+        response_handle: R,
+    ) -&amp;gt; ResponseInfo;
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;hickory_server&lt;/code&gt;では&lt;code&gt;Catalog&lt;/code&gt;がデフォルトの実装なので、そのコードを参考に決め打ちのIPを返すように実装します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;struct StubRequestHandler {}
+
+impl StubRequestHandler {
+    pub fn new() -&amp;gt; Self {
+        StubRequestHandler {}
+    }
+}
+
+#[async_trait::async_trait]
+impl RequestHandler for StubRequestHandler {
+    async fn handle_request&amp;lt;R: ResponseHandler&amp;gt;(
+        &amp;amp;self,
+        request: &amp;amp;Request,
+        mut response_handle: R,
+    ) -&amp;gt; ResponseInfo {
+        let result = match request.message_type() {
+            MessageType::Query =&amp;gt; match request.op_code() {
+                OpCode::Query =&amp;gt; {
+                    let a = A::new(203, 0, 113, 1);
+                    let rd = RData::A(a);
+                    let r =
+                        Record::from_rdata(request.query().name().into_name().unwrap(), 3600, rd);
+                    let response = MessageResponseBuilder::from_message_request(request);
+                    let response =
+                        response.build(*request.header(), vec![&amp;amp;r], vec![], vec![], vec![]);
+                    response_handle.send_response(response).await
+                }
+                _op =&amp;gt; {
+                    let response = MessageResponseBuilder::from_message_request(request);
+                    response_handle
+                        .send_response(response.error_msg(request.header(), ResponseCode::NotImp))
+                        .await
+                }
+            },
+            MessageType::Response =&amp;gt; {
+                let response = MessageResponseBuilder::from_message_request(request);
+                response_handle
+                    .send_response(response.error_msg(request.header(), ResponseCode::NotImp))
+                    .await
+            }
+        };
+
+        result.unwrap_or_else(|_e| {
+            let mut header = Header::new();
+            header.set_response_code(ResponseCode::ServFail);
+            header.into()
+        })
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;QUERY&lt;/code&gt;にのみ反応し、それ以外は&lt;code&gt;NOTIMP&lt;/code&gt;を返しています。&lt;/p&gt;
+&lt;p&gt;あとは、いい感じに&lt;code&gt;main&lt;/code&gt;を実装してあげます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;#[derive(Parser, Debug)]
+struct Cli {
+    /// Bind address
+    #[clap(long)]
+    bind: SocketAddr,
+}
+
+#[tokio::main]
+async fn main() -&amp;gt; anyhow::Result&amp;lt;()&amp;gt; {
+    let opt = Cli::parse();
+
+    let socket = UdpSocket::bind(&amp;amp;opt.bind).await?;
+    let handler = StubRequestHandler::new();
+    let mut server = ServerFuture::new(handler);
+    server.register_socket(socket);
+    server.block_until_done().await?;
+
+    Ok(())
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;❯ dig @192.168.2.32 www.jyuch.dev
+;; Warning: query response not set
+
+; &amp;lt;&amp;lt;&amp;gt;&amp;gt; DiG 9.18.18-0ubuntu2.1-Ubuntu &amp;lt;&amp;lt;&amp;gt;&amp;gt; @192.168.2.32 www.jyuch.dev
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&amp;gt;&amp;gt;HEADER&amp;lt;&amp;lt;- opcode: QUERY, status: NOERROR, id: 37403
+;; flags: rd ad; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 0
+;; WARNING: recursion requested but not available
+
+;; QUESTION SECTION:
+;www.jyuch.dev.                 IN      A
+
+;; ANSWER SECTION:
+www.jyuch.dev.          3600    IN      A       203.0.113.1
+
+;; Query time: 0 msec
+;; SERVER: 192.168.2.32#53(192.168.2.32) (UDP)
+;; WHEN: Sun Mar 31 19:52:46 JST 2024
+;; MSG SIZE  rcvd: 47
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h1&gt;DNS Fordingする&lt;/h1&gt;
+&lt;p&gt;DNSのクライアント側の実装は&lt;code&gt;hickory_client&lt;/code&gt;クレートにあります。&lt;/p&gt;
+&lt;p&gt;せっかくtokioを使ってるので、上流に問い合わせるためのクライアントとして&lt;code&gt;AsyncClient&lt;/code&gt;を使ってみます。&lt;/p&gt;
+&lt;!--
+と、この記事を書いている今になって気が付いたのですが、`AsyncClient`は`Send + Sync`でした。つらい
+--&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;struct StubRequestHandler {
+    upstream: Arc&amp;lt;Mutex&amp;lt;AsyncClient&amp;gt;&amp;gt;,
+}
+
+impl StubRequestHandler {
+    pub fn new(upstream: Arc&amp;lt;Mutex&amp;lt;AsyncClient&amp;gt;&amp;gt;) -&amp;gt; Self {
+        StubRequestHandler { upstream }
+    }
+}
+
+#[async_trait::async_trait]
+impl RequestHandler for StubRequestHandler {
+    async fn handle_request&amp;lt;R: ResponseHandler&amp;gt;(
+        &amp;amp;self,
+        request: &amp;amp;Request,
+        response_handle: R,
+    ) -&amp;gt; ResponseInfo {
+        let result = match request.message_type() {
+            MessageType::Query =&amp;gt; match request.op_code() {
+                OpCode::Query =&amp;gt; {
+                    let upstream = &amp;amp;mut *self.upstream.lock().await;
+                    forward_to_upstream(upstream, request, response_handle).await
+                }
+                _op =&amp;gt; server_not_implement(request, response_handle).await,
+            },
+            MessageType::Response =&amp;gt; server_not_implement(request, response_handle).await,
+        };
+
+        result.unwrap_or_else(|_e| {
+            let mut header = Header::new();
+            header.set_response_code(ResponseCode::ServFail);
+            header.into()
+        })
+    }
+}
+
+async fn forward_to_upstream&amp;lt;R: ResponseHandler&amp;gt;(
+    upstream: &amp;amp;mut AsyncClient,
+    request: &amp;amp;Request,
+    mut response_handle: R,
+) -&amp;gt; anyhow::Result&amp;lt;ResponseInfo&amp;gt; {
+    let response = upstream
+        .query(
+            request.query().name().into_name().unwrap(),
+            request.query().query_class(),
+            request.query().query_type(),
+        )
+        .await?;
+
+    let response_builder = MessageResponseBuilder::from_message_request(request);
+    let response = response_builder.build(
+        *request.header(),
+        response.answers(),
+        vec![],
+        vec![],
+        vec![],
+    );
+    let response_info = response_handle.send_response(response).await?;
+
+    Ok(response_info)
+}
+
+async fn server_not_implement&amp;lt;R: ResponseHandler&amp;gt;(
+    request: &amp;amp;Request,
+    mut response_handle: R,
+) -&amp;gt; anyhow::Result&amp;lt;ResponseInfo&amp;gt; {
+    let response = MessageResponseBuilder::from_message_request(request);
+    let response_info = response_handle
+        .send_response(response.error_msg(request.header(), ResponseCode::NotImp))
+        .await?;
+
+    Ok(response_info)
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;あとはいい感じに&lt;code&gt;AsyncClient&lt;/code&gt;を構築して&lt;code&gt;StubRequestHandler&lt;/code&gt;に渡してあげればOKです。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;#[derive(Parser, Debug)]
+struct Cli {
+    /// Bind address
+    #[clap(long)]
+    bind: SocketAddr,
+
+    /// Upstream address
+    #[clap(long)]
+    upstream: SocketAddr,
+}
+
+#[tokio::main]
+async fn main() -&amp;gt; anyhow::Result&amp;lt;()&amp;gt; {
+    let opt = Cli::parse();
+
+    let conn = UdpClientStream::&amp;lt;UdpSocket&amp;gt;::new(opt.upstream);
+    let (upstream, background) = AsyncClient::connect(conn).await?;
+    let _handle = tokio::spawn(background);
+    let handler = StubRequestHandler::new(Arc::new(Mutex::new(upstream)));
+
+    let socket = UdpSocket::bind(&amp;amp;opt.bind).await?;
+    let mut server = ServerFuture::new(handler);
+    server.register_socket(socket);
+    server.block_until_done().await?;
+
+    Ok(())
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;❯ dig @192.168.2.32 www.jyuch.dev
+;; Warning: query response not set
+
+; &amp;lt;&amp;lt;&amp;gt;&amp;gt; DiG 9.18.18-0ubuntu2.1-Ubuntu &amp;lt;&amp;lt;&amp;gt;&amp;gt; @192.168.2.32 www.jyuch.dev
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; -&amp;gt;&amp;gt;HEADER&amp;lt;&amp;lt;- opcode: QUERY, status: NOERROR, id: 7791
+;; flags: rd ad; QUERY: 1, ANSWER: 5, AUTHORITY: 0, ADDITIONAL: 0
+;; WARNING: recursion requested but not available
+
+;; QUESTION SECTION:
+;www.jyuch.dev.                 IN      A
+
+;; ANSWER SECTION:
+www.jyuch.dev.          300     IN      CNAME   jyuch.github.io.
+jyuch.github.io.        3600    IN      A       185.199.111.153
+jyuch.github.io.        3600    IN      A       185.199.109.153
+jyuch.github.io.        3600    IN      A       185.199.108.153
+jyuch.github.io.        3600    IN      A       185.199.110.153
+
+;; Query time: 28 msec
+;; SERVER: 192.168.2.32#53(192.168.2.32) (UDP)
+;; WHEN: Sun Mar 31 20:31:41 JST 2024
+;; MSG SIZE  rcvd: 124
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h1&gt;追記その１&lt;/h1&gt;
+&lt;p&gt;リクエストヘッダをそのままレスポンスヘッダとして打ち返していましたが、そうするとsystemd-resolvedが受け取り拒否します。
+Windowsはあんまり気にしていないみたいですけど。&lt;/p&gt;
+&lt;p&gt;正しくは以下の感じですね。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;let response_header = Header::response_from_request(request.header());
+let response_builder = MessageResponseBuilder::from_message_request(request);
+let response = response_builder.build(
+    response_header,
+    dns_response.as_ref().map(|it| it.answers()).unwrap_or(&amp;amp;[]),
+    &amp;amp;[],
+    &amp;amp;[],
+    &amp;amp;[],
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;digの結果の一行目に警告が載ってましたね・・・&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-text&quot;&gt;;; Warning: query response not set
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h1&gt;追記その２&lt;/h1&gt;
+&lt;p&gt;単純に&lt;code&gt;Header::response_from_request&lt;/code&gt;するとレスポンスヘッダに再起フラグが立たないので、上位DNSからのレスポンスヘッダに再起フラグが立っていたら立ててあげる必要があるようです。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;let mut response_header = Header::response_from_request(request.header());
+response_header.set_recursion_available(response.recursion_available());
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;でないとこんな警告がでます。というか出てましたね。ちゃんと読めよ&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-text&quot;&gt;;; WARNING: recursion requested but not available
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+</feed>
