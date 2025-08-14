@@ -6,7 +6,7 @@ url: /sitemap.xml
 {%- for page in search.pages() %}
   <url>
     <loc>{{ page.url | url(true) }}</loc>
-    <lastmod>{{ page.date | date("DATE") }}</lastmod>
+    <lastmod>{{ page.lastModified | date("DATE") }}</lastmod>
   </url>
 {%- endfor %}
 </urlset>
