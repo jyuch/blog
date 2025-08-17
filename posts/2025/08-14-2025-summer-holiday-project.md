@@ -3,6 +3,7 @@ title: 生成AIを使って楽にリプレースしたい
 description: 生成AIでプライベートプロジェクトのリプレースを行った際の記録です。
 date: 2025-08-14
 lastModified: 2025-08-14
+draft: true
 tags: 
   - gen-ai
   - rust
