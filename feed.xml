@@ -1,0 +1,1200 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<feed xmlns="http://www.w3.org/2005/Atom">
+	<title>レンコン畑でつかまえて</title>
+	<subtitle></subtitle>
+	<link href="https://www.jyuch.dev/feed.xml" rel="self"/>
+	<link href="https://www.jyuch.dev/"/>
+	
+	<updated>2025-11-09T10:07:40Z</updated>
+	<id>https://www.jyuch.dev/</id>
+	<author>
+		<name>jyuch</name>
+		<email></email>
+	</author>
+	<entry>
+		<title>DSPyを使用してLLMを使ったレシートの読み取り精度を向上させたい</title>
+		<link href="https://www.jyuch.dev/posts/2025/10-26-improve-precision-using-dspy/"/>
+		<updated>2025-10-26T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/10-26-improve-precision-using-dspy/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;簡単な家計簿をつけているのですが、レシートの内容を確認して転記するのがめんどくさいなと感じていました。&lt;/p&gt;
+&lt;p&gt;そこで、LLMを使って情報を抽出できないかなと考えていたのですが、せっかくなら&lt;a href=&quot;https://dspy.ai/&quot;&gt;DSPy&lt;/a&gt;を使って構造化出力するのと、プロンプト最適化を行ってみたいなということで試してみました。&lt;/p&gt;
+&lt;h2&gt;シグネチャの準備&lt;/h2&gt;
+&lt;p&gt;DSPyでは入力値と出力値をコードとして表現します。
+ここではレシート画像から購入日と合計金額を抽出することにします。&lt;/p&gt;
+&lt;p&gt;入力値と出力値はシグネチャとして表現され、&lt;code&gt;dspy.Signature&lt;/code&gt;のサブクラスとして実装します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-python&quot;&gt;from datetime import date
+
+import dspy
+
+
+class ExtractReceiptInfo(dspy.Signature):
+    &amp;quot;&amp;quot;&amp;quot;Extract total amount from receipt image.&amp;quot;&amp;quot;&amp;quot;
+
+    image: dspy.Image = dspy.InputField(desc=&amp;quot;Receipt image.&amp;quot;)
+    purchase_date: date = dspy.OutputField(desc=&amp;quot;Purchase date of payment.&amp;quot;)
+    total_amount: int = dspy.OutputField(desc=&amp;quot;Total amount of payment.&amp;quot;)
+
+
+class ReceiptExtractor(dspy.Module):
+    def __init__(self):
+        super().__init__()
+        self.extractor = dspy.ChainOfThought(ExtractReceiptInfo)
+
+    def forward(self, image):
+        return self.extractor(image=image)
+
+
+def extraction_metric(gold, pred, trace=None):
+    metric = 0
+
+    if gold.total_amount == pred.total_amount:
+        metric += 1
+    if gold.purchase_date == pred.purchase_date:
+        metric += 1
+
+    if trace is None:
+        return metric / 2.0
+    else:
+        return metric == 2
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;学習データの準備&lt;/h2&gt;
+&lt;p&gt;DSPyでは教師データを使用して入力データから期待する出力をするようにプロンプトを最適化します。&lt;/p&gt;
+&lt;p&gt;そのため、最初にある程度のレシート画像と、その画像からどのような結果を出力してほしいかの期待値をひたすら列挙する必要があります。&lt;/p&gt;
+&lt;p&gt;ここでは、以下のような教師データを家中のあるだけのレシートを使って作成します。
+スキャナでレシートを読み込み、エクセルでレシート画像と期待値の組み合わせをひたすら入力します。&lt;/p&gt;
+&lt;p&gt;このデータそのまま家計簿に突っ込めばよくね？とか考えてはいけません。&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;image&lt;/th&gt;
+&lt;th style=&quot;text-align:right&quot;&gt;purchase_date&lt;/th&gt;
+&lt;th style=&quot;text-align:right&quot;&gt;total_amount&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;20251019_000.jpg&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;2025-08-28&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;162&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;20251019_001.jpg&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;2025-08-19&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;170&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;20251019_002.jpg&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;2025-09-09&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;162&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;...&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;...&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;...&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2&gt;LM Studioの準備&lt;/h2&gt;
+&lt;p&gt;タスクを実行するLLMはLM Studioを使ってローカルで実行するので、LM Studioをインストールしておきます。
+モデルはGemma 3を使います。&lt;/p&gt;
+&lt;h2&gt;Databricks Free Editionの準備&lt;/h2&gt;
+&lt;p&gt;MIPROv2では教師として高性能なLLMを使用するのですが、ここではDatabricksでホストされているLlama 4 Maverickを利用します。&lt;/p&gt;
+&lt;p&gt;Databricks Free Editionではレートリミットなどの制限はありますが、無償で使わせてくれるのでありがたく使います。Databricksさんはなんて太っ腹なんでしょう！（ステマその１）&lt;/p&gt;
+&lt;p&gt;Settings → User → Developer → Access tokensからトークンを発行しておきます。
+また、MLFlowも使いたいので、併せてExperimentsも作成しておきます。
+Experimentsを作成すると、外部からExperimentsを使うにはみたいな画面が表示されるので、表示された環境変数をコピーしておきます。&lt;/p&gt;
+&lt;p&gt;最終的に以下の環境変数を登録します。&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;環境変数&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;例&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;DATABRICKS_API_BASE&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;https://dbc-12345678-abcd.cloud.databricks.com/serving-endpoints&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;DATABRICKS_API_KEY&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Databricksのシークレット&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;DATABRICKS_HOST&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;https://dbc-12345678-abcd.cloud.databricks.com&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;DATABRICKS_TOKEN&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Databricksのシークレット&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;MLFLOW_EXPERIMENT_ID&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;123456789012345&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;MLFLOW_REGISTRY_URI&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;databricks-uc&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;MLFLOW_TRACKING_URI&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;databricks&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;&lt;code&gt;DATABRICKS_API_BASE&lt;/code&gt;と&lt;code&gt;DATABRICKS_API_KEY&lt;/code&gt;はDatabricksのServing endpointsにアクセスする用で、それ以外はMLFlowにメトリックを送る用です。&lt;/p&gt;
+&lt;h2&gt;トレーニング&lt;/h2&gt;
+&lt;p&gt;必要なものがそろったらいよいよプロンプト最適化を実行します。
+ここではとりあえずMIPROv2を使っていきます。&lt;/p&gt;
+&lt;p&gt;余談ですが、DSPyはLLMにアクセスするために&lt;a href=&quot;https://www.litellm.ai/&quot;&gt;LiteLLM&lt;/a&gt;というライブラリを使用しているようです。&lt;/p&gt;
+&lt;p&gt;LiteLLMではプレフィックスでどのプロバイダーのAPI形式（OpenAI互換やAnthropic互換など）を判断しているようです。
+また、LM StudioはOpenAI互換です。&lt;/p&gt;
+&lt;p&gt;そのため、OpenAI互換としてAPIを叩いてほしいのですが、&lt;code&gt;openai/google/gemma-3-12b&lt;/code&gt;とかいう各方面から怒られそうなモデル名で指定をしないといけません。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-python&quot;&gt;import csv
+import os
+from datetime import datetime
+from typing import List
+
+import dspy
+import mlflow
+
+from program import ReceiptExtractor, extraction_metric
+
+LMSTUDIO_API_BASE = os.environ[&amp;quot;LMSTUDIO_API_BASE&amp;quot;]
+
+teacher_llm = dspy.LM(
+    &amp;quot;databricks/databricks-llama-4-maverick&amp;quot;,
+    temperature=1.0,
+)
+
+student_llm = dspy.LM(
+    &amp;quot;openai/google/gemma-3-12b&amp;quot;,
+    api_base=LMSTUDIO_API_BASE,
+    api_key=&amp;quot;dummy&amp;quot;,
+)
+
+
+def run_prompt_optimizer(train_examples: List[dspy.Example]):
+    student_program = ReceiptExtractor()
+    optimizer = dspy.MIPROv2(
+        metric=extraction_metric, prompt_model=teacher_llm, task_model=student_llm
+    )
+    compiled_program = optimizer.compile(student_program, trainset=train_examples)
+    compiled_program.save(&amp;quot;./program.json&amp;quot;, save_program=False)
+
+
+def main():
+    mlflow.dspy.autolog(
+        log_compiles=True,
+        log_evals=True,
+        log_traces_from_compile=True,
+    )
+
+    dspy.configure(lm=student_llm)
+
+    train_examples: List[dspy.Example]
+    with open(&amp;quot;./dataset/training.csv&amp;quot;, encoding=&amp;quot;utf_8&amp;quot;) as f:
+        reader = csv.DictReader(f)
+        train_examples = [
+            dspy.Example(
+                image=dspy.Image.from_file(f&amp;quot;./dataset/{row[&#39;image&#39;]}&amp;quot;),
+                purchase_date=datetime.strptime(
+                    row[&amp;quot;purchase_date&amp;quot;], &amp;quot;%Y-%m-%d&amp;quot;
+                ).date(),
+                total_amount=int(row[&amp;quot;total_amount&amp;quot;]),
+            ).with_inputs(&amp;quot;image&amp;quot;)
+            for row in reader
+        ]
+
+    run_prompt_optimizer(train_examples)
+
+
+if __name__ == &amp;quot;__main__&amp;quot;:
+    main()
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;評価&lt;/h2&gt;
+&lt;p&gt;学習が終わったら、とりあえずどのくらい違うのか評価してみましょう。&lt;/p&gt;
+&lt;p&gt;ここでは、学習前と学習後、LLMのモデル、パラメータ数を変えてどのくらい差があるのかを確認しています。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-python&quot;&gt;import csv
+import os
+from datetime import datetime
+from typing import List
+
+import dspy
+from dspy.evaluate.evaluate import Evaluate
+
+from program import ReceiptExtractor, extraction_metric
+
+LMSTUDIO_API_BASE = os.environ[&amp;quot;LMSTUDIO_API_BASE&amp;quot;]
+
+gemma_3_12b = dspy.LM(
+    &amp;quot;openai/google/gemma-3-12b&amp;quot;,
+    api_base=LMSTUDIO_API_BASE,
+    api_key=&amp;quot;dummy&amp;quot;,
+)
+
+gemma_3_27b = dspy.LM(
+    &amp;quot;openai/google/gemma-3-27b&amp;quot;,
+    api_base=LMSTUDIO_API_BASE,
+    api_key=&amp;quot;dummy&amp;quot;,
+)
+
+llama_4_maverick = dspy.LM(
+    &amp;quot;databricks/databricks-llama-4-maverick&amp;quot;,
+)
+
+
+def main():
+    dspy.configure(lm=gemma_3_12b)
+    original = ReceiptExtractor()
+    trained = ReceiptExtractor()
+    trained.load(&amp;quot;./program.json&amp;quot;)
+
+    train_examples: List[dspy.Example]
+    with open(&amp;quot;./dataset/training.csv&amp;quot;, encoding=&amp;quot;utf_8&amp;quot;) as f:
+        reader = csv.DictReader(f)
+        train_examples = [
+            dspy.Example(
+                image=dspy.Image.from_file(f&amp;quot;./dataset/{row[&#39;image&#39;]}&amp;quot;),
+                purchase_date=datetime.strptime(
+                    row[&amp;quot;purchase_date&amp;quot;], &amp;quot;%Y-%m-%d&amp;quot;
+                ).date(),
+                total_amount=int(row[&amp;quot;total_amount&amp;quot;]),
+            ).with_inputs(&amp;quot;image&amp;quot;)
+            for row in reader
+        ]
+
+    evaluate = Evaluate(
+        devset=train_examples, num_threads=1, display_progress=True, display_table=0
+    )
+
+    with dspy.context(lm=gemma_3_12b):
+        evaluate(original, metric=extraction_metric)
+        evaluate(trained, metric=extraction_metric)
+
+    with dspy.context(lm=gemma_3_27b):
+        evaluate(original, metric=extraction_metric)
+        evaluate(trained, metric=extraction_metric)
+
+    with dspy.context(lm=llama_4_maverick):
+        evaluate(original, metric=extraction_metric)
+        evaluate(trained, metric=extraction_metric)
+
+
+if __name__ == &amp;quot;__main__&amp;quot;:
+    main()
+&lt;/code&gt;&lt;/pre&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;モデル&lt;/th&gt;
+&lt;th style=&quot;text-align:right&quot;&gt;最適化前&lt;/th&gt;
+&lt;th style=&quot;text-align:right&quot;&gt;最適化後&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;google/gemma-3-12&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;84.0%&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;96.2%&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;google/gemma-3-27b&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;80.2%&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;97.2%&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;databricks-llama-4-maverick&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;100.0%&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;100.0%&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;あー、うん、まぁ、ねぇ。&lt;/p&gt;
+&lt;h2&gt;おわりに&lt;/h2&gt;
+&lt;p&gt;プロンプト最適化の部分については確かに最適化すれば性能は上がりましたが、最初から高性能なモデルを使えばそりゃ精度は高いよねというのを如実に見せつけられました。&lt;/p&gt;
+&lt;p&gt;ですが、個人的には構造化出力をコードとして表現できるのはうれしみがありますね。
+プロンプトにJSON Schemaをくっつけて、出力をJSONパーサに食わせて正常にパース出来るのを祈るという作業から解放されるだけでもDSPyを使ううれしみがあると思います。&lt;/p&gt;
+&lt;p&gt;教師データだけ用意しておけば、他のLLMが出てきたときは最適化と検証のループを回して、今までよりも成績が良ければ入れ替えるというサイクルをほぼ自動で回せます。&lt;/p&gt;
+&lt;p&gt;ギョームでLLMを使う場合はこの辺のサイクルを回せるようにしておくと後々のつらみポイントを軽減出来ると思うので、みなさんDatabricksと合わせて使ってみてはいかがでしょうか。（ステマその２）&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/jyuch/extract-receipt/tree/master&quot;&gt;jyuch / extract-receipt&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>PostgreSQL 18 の uuidv7 関数は単調増加が保証されているから安心だねってお話</title>
+		<link href="https://www.jyuch.dev/posts/2025/10-12-pg18-uuidv7-is-monotonically-increasing/"/>
+		<updated>2025-10-12T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/10-12-pg18-uuidv7-is-monotonically-increasing/</id>
+		<content type="html">&lt;h2&gt;長いので先にまとめ&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;UUIDv7は&lt;a href=&quot;https://datatracker.ietf.org/doc/html/rfc9562&quot;&gt;RFC9562&lt;/a&gt;上ではミリ秒精度のタイムスタンプを持つことを要求している&lt;/li&gt;
+&lt;li&gt;また、オプショナルとして&lt;code&gt;rand_a&lt;/code&gt;及び&lt;code&gt;rand_b&lt;/code&gt;の生成方法を工夫して単調増加を保証しても良いとされている&lt;/li&gt;
+&lt;li&gt;PostgreSQL 18 の&lt;code&gt;uuidv7()&lt;/code&gt;関数はRFC9562のSection 6.2 Method 3で提案されているタイムスタンプをサブミリ秒まで拡張する方法で単調増加を保証している
+&lt;ul&gt;
+&lt;li&gt;サブミリ秒レベルでタイムスタンプが衝突した場合は、最小精度でインクリメントすることでタイムスタンプの衝突を回避している&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;最近リリースされたPostgreSQL 18 で UUIDv7 の生成がサポートされました。&lt;/p&gt;
+&lt;p&gt;個人的にはUUIDが生成順にソート可能になるうれしさがよく分からないのですが、いざ使うことになった際に困らないように調べてみることにしました。&lt;/p&gt;
+&lt;h2&gt;UUIDv7&lt;/h2&gt;
+&lt;p&gt;そもそも、UUIDv7はどのような構造をしているのでしょうか。&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://datatracker.ietf.org/doc/html/rfc9562#name-uuid-version-7&quot;&gt;5.7. UUID Version 7&lt;/a&gt;からビットレイアウトを引用して確認してみましょう。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-txt&quot;&gt;    0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                           unix_ts_ms                          |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |          unix_ts_ms           |  ver  |       rand_a          |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |var|                        rand_b                             |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                            rand_b                             |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+                   Figure 11: UUIDv7 Field and Bit Layout
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;バージョン（&lt;code&gt;ver&lt;/code&gt;）とバリアント（&lt;code&gt;var&lt;/code&gt;）を除くと、以下の要素から構成されていることが分かります。&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;フィールド&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;説明&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;unix_ts_ms&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;48ビットで表現されたミリ秒精度のUnixエポックタイムスタンプ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;rand_a&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;12ビットのランダムフィールド&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;rand_b&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;62ビットのランダムフィールド&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;RFCが最低限求めている仕様では、タイムスタンプはミリ秒精度となっています。
+そのため、同一ミリ秒内で複数回UUIDが生成された場合、生成された順序の並べ替えを保証出来なくなってしまいます。&lt;/p&gt;
+&lt;p&gt;そのため、&lt;a href=&quot;https://datatracker.ietf.org/doc/html/rfc9562#name-monotonicity-and-counters&quot;&gt;6.2. Monotonicity and Counters&lt;/a&gt;では、高頻度でのUUIID生成環境下での単調増加性を保証するための方法が提案されています。&lt;/p&gt;
+&lt;h2&gt;PostgreSQL 18 の UUIDv7&lt;/h2&gt;
+&lt;p&gt;PostgreSQL 18 の&lt;code&gt;uuidv7()&lt;/code&gt;関数はミリ秒タイムスタンプ + サブミリ秒タイムスタンプ + ランダム値で計算されていることが&lt;a href=&quot;https://www.postgresql.org/docs/18/functions-uuid.html#FUNC_UUID_GEN_TABLE&quot;&gt;ドキュメントに記載されています。&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;具体的には&lt;code&gt;uuid.c&lt;/code&gt;の以下の&lt;code&gt;generate_uuidv7()&lt;/code&gt;関数で実装されています。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-c&quot;&gt;/*
+ * Generate UUID version 7 per RFC 9562, with the given timestamp.
+ *
+ * UUID version 7 consists of a Unix timestamp in milliseconds (48 bits) and
+ * 74 random bits, excluding the required version and variant bits. To ensure
+ * monotonicity in scenarios of high-frequency UUID generation, we employ the
+ * method &amp;quot;Replace Leftmost Random Bits with Increased Clock Precision (Method 3)&amp;quot;,
+ * described in the RFC. This method utilizes 12 bits from the &amp;quot;rand_a&amp;quot; bits
+ * to store a 1/4096 (or 2^12) fraction of sub-millisecond precision.
+ *
+ * unix_ts_ms is a number of milliseconds since start of the UNIX epoch,
+ * and sub_ms is a number of nanoseconds within millisecond. These values are
+ * used for time-dependent bits of UUID.
+ *
+ * NB: all numbers here are unsigned, unix_ts_ms cannot be negative per RFC.
+ */
+static pg_uuid_t *
+generate_uuidv7(uint64 unix_ts_ms, uint32 sub_ms)
+{
+	pg_uuid_t  *uuid = palloc(UUID_LEN);
+	uint32		increased_clock_precision;
+
+	/* Fill in time part */
+	uuid-&amp;gt;data[0] = (unsigned char) (unix_ts_ms &amp;gt;&amp;gt; 40);
+	uuid-&amp;gt;data[1] = (unsigned char) (unix_ts_ms &amp;gt;&amp;gt; 32);
+	uuid-&amp;gt;data[2] = (unsigned char) (unix_ts_ms &amp;gt;&amp;gt; 24);
+	uuid-&amp;gt;data[3] = (unsigned char) (unix_ts_ms &amp;gt;&amp;gt; 16);
+	uuid-&amp;gt;data[4] = (unsigned char) (unix_ts_ms &amp;gt;&amp;gt; 8);
+	uuid-&amp;gt;data[5] = (unsigned char) unix_ts_ms;
+
+	/*
+	 * sub-millisecond timestamp fraction (SUBMS_BITS bits, not
+	 * SUBMS_MINIMAL_STEP_BITS)
+	 */
+	increased_clock_precision = (sub_ms * (1 &amp;lt;&amp;lt; SUBMS_BITS)) / NS_PER_MS;
+
+	/* Fill the increased clock precision to &amp;quot;rand_a&amp;quot; bits */
+	uuid-&amp;gt;data[6] = (unsigned char) (increased_clock_precision &amp;gt;&amp;gt; 8);
+	uuid-&amp;gt;data[7] = (unsigned char) (increased_clock_precision);
+
+	/* fill everything after the increased clock precision with random bytes */
+	if (!pg_strong_random(&amp;amp;uuid-&amp;gt;data[8], UUID_LEN - 8))
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg(&amp;quot;could not generate random values&amp;quot;)));
+
+#if SUBMS_MINIMAL_STEP_BITS == 10
+
+	/*
+	 * On systems that have only 10 bits of sub-ms precision,  2 least
+	 * significant are dependent on other time-specific bits, and they do not
+	 * contribute to uniqueness. To make these bit random we mix in two bits
+	 * from CSPRNG. SUBMS_MINIMAL_STEP is chosen so that we still guarantee
+	 * monotonicity despite altering these bits.
+	 */
+	uuid-&amp;gt;data[7] = uuid-&amp;gt;data[7] ^ (uuid-&amp;gt;data[8] &amp;gt;&amp;gt; 6);
+#endif
+
+	/*
+	 * Set magic numbers for a &amp;quot;version 7&amp;quot; (pseudorandom) UUID and variant,
+	 * see https://www.rfc-editor.org/rfc/rfc9562#name-version-field
+	 */
+	uuid_set_version(uuid, 7);
+
+	return uuid;
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;詳しくは実装を読んでもらえればと思いますが、&lt;code&gt;rand_a&lt;/code&gt;フィールドの12bitにナノ秒（Linux）を埋め込むか、マイクロ秒 + ランダム値（Windows・mac）を埋め込んでいます。&lt;/p&gt;
+&lt;p&gt;また、現在時刻を供給している&lt;code&gt;get_real_time_ns_ascending()&lt;/code&gt;関数内で、前回との時刻の差分が&lt;code&gt;rand_a&lt;/code&gt;フィールドに埋め込むタイムスタンプの精度以下の場合は、最小精度（Linuxの場合は245マイクロ秒）を加算することでサブミリ秒内でタイムスタンプが衝突することを防いでいます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-c&quot;&gt;/*
+ * Get the current timestamp with nanosecond precision for UUID generation.
+ * The returned timestamp is ensured to be at least SUBMS_MINIMAL_STEP greater
+ * than the previous returned timestamp (on this backend).
+ */
+static inline int64
+get_real_time_ns_ascending()
+{
+	static int64 previous_ns = 0;
+	int64		ns;
+
+	/* Get the current real timestamp */
+
+#ifdef	_MSC_VER
+	struct timeval tmp;
+
+	gettimeofday(&amp;amp;tmp, NULL);
+	ns = tmp.tv_sec * NS_PER_S + tmp.tv_usec * NS_PER_US;
+#else
+	struct timespec tmp;
+
+	/*
+	 * We don&#39;t use gettimeofday(), instead use clock_gettime() with
+	 * CLOCK_REALTIME where available in order to get a high-precision
+	 * (nanoseconds) real timestamp.
+	 *
+	 * Note while a timestamp returned by clock_gettime() with CLOCK_REALTIME
+	 * is nanosecond-precision on most Unix-like platforms, on some platforms
+	 * such as macOS it&#39;s restricted to microsecond-precision.
+	 */
+	clock_gettime(CLOCK_REALTIME, &amp;amp;tmp);
+	ns = tmp.tv_sec * NS_PER_S + tmp.tv_nsec;
+#endif
+
+	/* Guarantee the minimal step advancement of the timestamp */
+	if (previous_ns + SUBMS_MINIMAL_STEP_NS &amp;gt;= ns)
+		ns = previous_ns + SUBMS_MINIMAL_STEP_NS;
+	previous_ns = ns;
+
+	return ns;
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;そのため、実用的かどうかと言われるとｱﾚですが、&lt;code&gt;uuidv7()&lt;/code&gt;関数で生成されたUUIDv7からサブミリ秒のタイムスタンプを抽出することが出来ます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;// サブミリ秒が12ビットで供給されている環境用
+fn uuidv7_to_timestamp(uuidv7: &amp;amp;str) -&amp;gt; (i64, i64) {
+    let uuid = uuidv7.replace(&amp;quot;-&amp;quot;, &amp;quot;&amp;quot;);
+    let uuid = u128::from_str_radix(&amp;amp;*uuid, 16).unwrap();
+    let ms = (uuid &amp;gt;&amp;gt; 80) as i64;
+
+    let uuid = uuid.to_be_bytes();
+    let increased_clock_precision = (((uuid[6] &amp;amp; 0x0fu8) as i64) &amp;lt;&amp;lt; 8) | uuid[7] as i64;
+    let ns = increased_clock_precision * SUBMS_MINIMAL_STEP_NS;
+
+    (ms, ns)
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/jyuch/pg-uuidv7-to-timestamp&quot;&gt;jyuch/pg-uuidv7-to-timestamp&lt;/a&gt;&lt;/p&gt;
+&lt;h2&gt;PostgreSQL 18 でのUUIDv7生成例&lt;/h2&gt;
+&lt;p&gt;最後に実際に&lt;code&gt;uuidv7()&lt;/code&gt;関数を使ってUUIDv7を生成して、単調増加しているかを確認してみましょう。&lt;/p&gt;
+&lt;p&gt;以下のようなテーブルを作成したうえで、&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sql&quot;&gt;create table uuidv7_test_table
+(
+    i     int,
+    clock timestamp,
+    value uuid
+);
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;以下のクエリで全力でUUIDv7を生成します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sql&quot;&gt;begin transaction;
+do
+$do$
+  begin
+    for i in 1..1000000
+      loop
+        insert into uuidv7_test_table(i, clock, value) 
+        values (i, clock_timestamp(), uuidv7());
+      end loop;
+    end
+$do$;
+end;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;すると、以下のような結果となります。
+上記の&lt;code&gt;uuidv7_to_timestamp()&lt;/code&gt;の結果を併記しています。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sql&quot;&gt;select i, value, uuid_extract_timestamp(value), clock
+from uuidv7_test_table
+order by value;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;i&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;value&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;uuid_extract_timestamp&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;clock&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;uuidv7_to_timestamp&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;1&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;0199d67d-81a7-713d-aed5-6bbd22a476c2&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479000 +00:00&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479071&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479 UTC 77665&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;0199d67d-81a7-7be4-ba18-b1d95ac5835f&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479000 +00:00&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479741&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479 UTC 745780&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;3&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;0199d67d-81a7-7c31-9ca1-df81b59c2e69&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479000 +00:00&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479762&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479 UTC 764645&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;4&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;0199d67d-81a7-7c45-b183-8ebf38326e24&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479000 +00:00&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479766&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479 UTC 769545&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;5&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;0199d67d-81a7-7c55-893a-c1685851f5f7&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479000 +00:00&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479770&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479 UTC 773465&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;&lt;code&gt;uuid_extract_timestamp&lt;/code&gt;関数がミリ秒までの精度しか返していませんが、仕様上はミリ秒精度があれば良いとされていることと、外部で生成されたUUIDv7でも対応できるようにこのようになっています。&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>PostgreSQL 18 をソースコードからビルドしたい</title>
+		<link href="https://www.jyuch.dev/posts/2025/10-11-build-postgresql-18/"/>
+		<updated>2025-10-11T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/10-11-build-postgresql-18/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;PostgreSQL 18 がリリースされたので、ソースコードからビルドする手順を確認してみました。&lt;/p&gt;
+&lt;p&gt;まぁ、基本的には公式リファレンスと過去の自分のブログをなぞっているだけです。&lt;/p&gt;
+&lt;p&gt;LLVMのサポートと、lz4・zstd圧縮のサポートを有効にしてビルドします。&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://www.postgresql.org/docs/18/installation.html&quot;&gt;Chapter 17. Installation from Source Code&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://www.jyuch.dev/posts/2021/build-pg-on-linux/&quot;&gt;PostgreSQLを野良ビルドしてローカルインストールしたい&lt;/a&gt;&lt;/p&gt;
+&lt;h2&gt;環境&lt;/h2&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;ソフトウェア&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;バージョン&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;OS&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Ubuntu 24.04.3 LTS&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;PostgreSQL&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;18.0&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;また、ソースコードは&lt;code&gt;$HOME/src&lt;/code&gt;に展開するものとし、バイナリは&lt;code&gt;$HOME/.local/pg18.0&lt;/code&gt;にインストールするものとします。&lt;/p&gt;
+&lt;h2&gt;コンパイラ・ライブラリのインストール&lt;/h2&gt;
+&lt;p&gt;ビルドするだけなら以下のパッケージを入れるだけでOKです。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;sudo apt install &#92;
+  build-essential &#92;
+  flex &#92;
+  bison &#92;
+  libreadline-dev &#92;
+  zlib1g-dev &#92;
+  liblz4-dev &#92;
+  libzstd-dev &#92;
+  llvm-20 &#92;
+  clang-20
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;ドキュメントを含めたフルビルドが必要なら以下のパッケージも必要になります。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;sudo apt install &#92;
+  docbook-xml &#92;
+  docbook-xsl &#92;
+  libxml2-utils &#92;
+  xsltproc &#92;
+  fop
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;ソースコードのダウンロード・展開&lt;/h2&gt;
+&lt;p&gt;以下のコマンドよりソースコードをダウロード・展開します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;cd $HOME/src
+curl -OL https://ftp.postgresql.org/pub/source/v18.0/postgresql-18.0.tar.gz
+tar zxvf postgresql-18.0.tar.gz
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;ビルド・インストール&lt;/h2&gt;
+&lt;p&gt;以下のコマンドより、&lt;code&gt;configure&lt;/code&gt;を流します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;cd postgresql-18.0
+mkdir build_temp &amp;amp;&amp;amp; cd build_temp
+$HOME/src/postgresql-18.0/configure &#92;
+  --prefix=$HOME/.local/pg18.0 &#92;
+  --with-icu &#92;
+  --with-lz4 &#92;
+  --with-zstd &#92;
+  --with-llvm &#92;
+  LLVM_CONFIG=&#39;/usr/bin/llvm-config-20&#39; &#92;
+  CLANG=&#39;/usr/bin/clang-20&#39; &#92;
+  CC=&#39;/usr/bin/clang-20&#39; &#92;
+  CXX=&#39;/usr/bin/clang-20&#39;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;バイナリ系をビルドするだけなら以下のコマンドを実行します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;make world-bin
+make install-world-bin
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;ドキュメントを含めてすべてビルドするなら以下のコマンドを実行します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;make world
+make install-world
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>生成AIは業務の夢を見るか</title>
+		<link href="https://www.jyuch.dev/posts/2025/09-27-do-gen-ais-dream-of-biz/"/>
+		<updated>2025-09-27T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/09-27-do-gen-ais-dream-of-biz/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;最近は猫も杓子も生成AIの話題で持ちきりです。
+ソフトウェアエンジニアリングの領域では生成AIにコードを書かせる具体的な方法論が積極的に議論されています。&lt;/p&gt;
+&lt;p&gt;対して、生成AIを実業務に載せる話となると、何とも言えない抽象論のお話がメインで、生成AIに購買業務をやらせていますという話は聞きません。&lt;/p&gt;
+&lt;p&gt;そこで、業務アプリを模したMCPを実装し、生成AIがそのMCPを介して人間の指示に従って業務を遂行できるのかを試してみました。&lt;/p&gt;
+&lt;h2&gt;実装したMCP&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/jyuch/badcompany-enterprise-mcp&quot;&gt;badcompany-enterprise-mcp&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;今回は簡略化した購買業務を遂行するためのMCPを実装しました。&lt;/p&gt;
+&lt;p&gt;MCPは以下のツールを備えており、生成AIが在庫数を取得したり発注を行えるようになっています。&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;ツール名&lt;/th&gt;
+&lt;th&gt;説明&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;query_stock&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;指定したアイテムの在庫数を取得します。&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;query_item_required&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;製造対象アイテムに必要な部品とその数量を取得します。&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;order_item&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;指定したアイテムを発注します。&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;query_pending_orders&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;発注残のリストを取得します。&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;query_item_info&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;アイテムの基本情報（名前・種別）を取得します。&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;余談ですが、このコードは混じりっけなしの純度100%の手書きコードです。
+まぁ、MCPとか書いてみたかったし・・・&lt;/p&gt;
+&lt;h2&gt;実行&lt;/h2&gt;
+&lt;p&gt;今回は&lt;code&gt;gpt-oss-120b&lt;/code&gt;をLM Studioで動かし、ClineにMCPを接続し動作させてみました。&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;rules.mdを読んで以下の指示に従いなさい。
+PRODUCT-Aが10個必要です。
+足りない分を製造するためのアイテムを発注しなさい。&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;PRODUCT-Aは在庫に1個あり、製造するのにPART-aが2個とPART-bが3個必要です。
+PART-aは在庫が1個、PART-bは在庫が2個あります。&lt;/p&gt;
+&lt;p&gt;そのため、最終的にPART-aを17個とPART-bを25個発注する&lt;code&gt;order_item&lt;/code&gt;を呼び出せれば成功となります。&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;PRODUCT‑A を 10 個確保するために、在庫が不足していた部品 PART‑a と PART‑b の必要数量（それぞれ 18 個・27 個）を確認し、現在の在庫数（PART‑a が 1 個、PART‑b が 2 個）から不足分を計算しました。その結果、以下の発注を行いました。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;PART‑a を 17 個 発注（成功）&lt;/li&gt;
+&lt;li&gt;PART‑b を 25 個 発注（成功）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;これにより、PRODUCT‑A の残り 9 個を製造するために必要な部品はすべて確保されました。現在在庫は以下の通りです。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;PRODUCT‑A : 1 個（既存）&lt;/li&gt;
+&lt;li&gt;PART‑a : 18 個（発注分含む）&lt;/li&gt;
+&lt;li&gt;PART‑b : 27 個（発注分含む）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;以上で、要求された「PRODUCT‑A が 10 個必要」というタスクは完了しました。&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h2&gt;おわりに&lt;/h2&gt;
+&lt;p&gt;とりあえず単純化された業務をMCPを介して実行することは出来ました。&lt;/p&gt;
+&lt;p&gt;ただ、実業務に適用しようとすると、どうなんでしょうね？
+まぁ、考える機会があれば考えてみます。&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>Unicode Character Database の歩き方</title>
+		<link href="https://www.jyuch.dev/posts/2025/08-29-ucd/"/>
+		<updated>2025-08-29T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/08-29-ucd/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;所用でUnicode Character Database（UCD）で調べ物をする必要があったのですが、Unicodeのサイトのググラビリティが恐ろしく低く調べるのに難儀したので、未来の自分のために残しておこうというｱﾚです。&lt;/p&gt;
+&lt;h2&gt;Unicode® Standard&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://www.unicode.org/standard/standard.html&quot;&gt;Unicode® Standard&lt;/a&gt;はUnicodeの仕様についてのトップページです。&lt;/p&gt;
+&lt;p&gt;最新のUnicodeの仕様は&lt;a href=&quot;https://www.unicode.org/versions/latest/&quot;&gt;https://www.unicode.org/versions/latest/&lt;/a&gt;から飛べます。&lt;/p&gt;
+&lt;h2&gt;UAX #41: Common References for Unicode Standard Annexes&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://www.unicode.org/reports/tr41/&quot;&gt;UAX #41: Common References for UAXs&lt;/a&gt;は他のUAXへのリファレンスセットです。&lt;/p&gt;
+&lt;h2&gt;UAX #44: Unicode Character Database&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://www.unicode.org/reports/tr44/&quot;&gt;UAX #44: Unicode Character Database&lt;/a&gt;で各テキストファイルの中身が解説されています。&lt;/p&gt;
+&lt;p&gt;また、&lt;a href=&quot;https://www.unicode.org/Public/&quot;&gt;https://www.unicode.org/Public/&lt;/a&gt;から各UnicodeバージョンのUCDテキストファイルをダウンロードできます。&lt;/p&gt;
+&lt;h2&gt;Unicode Utilities&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://util.unicode.org/UnicodeJsps/index.jsp&quot;&gt;Unicode Utilities&lt;/a&gt;はUCDの内容を確認するのに役に立ちます。&lt;/p&gt;
+&lt;p&gt;特に&lt;a href=&quot;https://util.unicode.org/UnicodeJsps/character.jsp&quot;&gt;Unicode Utilities: Character Properties&lt;/a&gt;は文字のプロパティを確認する際に特に便利です。&lt;/p&gt;
+&lt;p&gt;デフォルトで表示されているのが☕なのは、こんなページを確認するような人は正常ではなく、多量のカフェインを要しているということを暗示しているのでしょうか？&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>ネットワークスペシャリスト試験に合格したお話</title>
+		<link href="https://www.jyuch.dev/posts/2025/07-13-2025-spring-nw/"/>
+		<updated>2025-07-13T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/07-13-2025-spring-nw/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;去年の12月の&lt;a href=&quot;https://www.jyuch.dev/posts/2024/12-28-2024-autumn-ap/&quot;&gt;応用情報技術者試験&lt;/a&gt;に続きネットワークスペシャリスト試験に合格したのでそのお話です。&lt;/p&gt;
+&lt;p&gt;特に言うこともないのですが、せっかく合格したので何か書いておこうというｱﾚです。&lt;/p&gt;
+&lt;p&gt;&lt;s&gt;こいついっつも試験受けてんな&lt;/s&gt;&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2025/07-05-2025-spring-nw/result.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;h2&gt;会場とか雰囲気とか&lt;/h2&gt;
+&lt;p&gt;前回に引き続きつくばの国際会議場で受験しました。&lt;/p&gt;
+&lt;p&gt;国際会議場でのネットワークスペシャリスト試験は２つ部屋に分かれていたので正確なところはわかりませんが、少なくとも私が受験したほうの部屋では午前Ⅰを受験されている人は居ませんでした。
+あの部屋の広さで午前Ⅰを自分一人で受験すると心が折れるかもしれません。&lt;/p&gt;
+&lt;p&gt;年齢層はというと応用情報と比べると若干年齢層が上がり、20代後半から30代の人が一番多かったと思います。
+ちらほら学生っぽい方もいて、学生時代はこのような試験を受けようとすら思わなかった私からするとすごいなと素直に感心してました。&lt;/p&gt;
+&lt;p&gt;私はというと、会場で参考書を見てもそわそわして全く集中できないタイプなので、午前Ⅱが始まるまでイヤホンで音楽を聴きながらひたすらラムネをボリボリ食っている異常者と化していました。&lt;/p&gt;
+&lt;h2&gt;アドバイス？&lt;/h2&gt;
+&lt;p&gt;午後Ⅰ・Ⅱはいくつかある問題から解く問題を選択する形式ですが、悠長に悩んでいる暇はないのである程度スパっと決める必要があります。&lt;/p&gt;
+&lt;p&gt;そこで、私は問題選択の方針として不得手な分野を優先して回避するというのをあらかじめ決めていました。&lt;/p&gt;
+&lt;p&gt;私の得意不得意の傾向は証明書 ＞ ルーティング ＞ セキュリティ ＞ マルチキャスト ＞ VoIP ＞＞＞ 無線という順なので、なるべく無線は避けるといった具合です。&lt;/p&gt;
+&lt;p&gt;また、個人的にはこういう試験を暗記で乗り切るのはちょっと違うかなと思っていますが、どのみち午後Ⅱとかいう暗記ではどうあがいても乗り切れない問題を解かないといけない事を考えると、少しでも午後問題の対策に勉強時間を割いたほうがいいと思います。
+そのうえで午前Ⅱを安定感をもって突破するなら暗記してしまうのも手だと思います。&lt;/p&gt;
+&lt;p&gt;また、午後Ⅱ問題も過去数年分は何周かはしたほうがいいと思います。
+これは問題と解答を覚えるというよりかは、問題文の日本語に慣れるという意味合いと、〇〇文字で述べよという記述に慣れるという意味合いがあります。&lt;/p&gt;
+&lt;p&gt;個人的には過去問は午前Ⅱは10分、午後Ⅰは30分、午後Ⅱは60分位で解けていたので、細かい時間しか取れない平日は午前Ⅱや午後Ⅰ、まとまった時間が取れる休日に午後Ⅱを解くようにすると時間を有効に使えると思います。&lt;/p&gt;
+&lt;p&gt;まぁ、結局は午後問題は自分が解きやすい問題が出ることを祈ることしかできないので、最終的には祈祷力が問われます。&lt;/p&gt;
+&lt;h2&gt;試験の感想&lt;/h2&gt;
+&lt;h3&gt;午前Ⅱ&lt;/h3&gt;
+&lt;p&gt;全体的な問題構成は例年通りといったところで、ざっくりと前半に計算問題、真ん中あたりにネットワークの知識を問う問題、後ろのほうに一般的なIT知識を問う問題構成となっていました。&lt;/p&gt;
+&lt;p&gt;計算問題は割と過去問からの出題が多かった気がします。
+ですので、ある程度過去問をやりこんでいて計算問題の答えの数字を覚えている人は計算せずに答えられたのかなと思います。
+特に答えが80になる例のアーランの問題は出題間隔的に出てもおかしくなかったので、予想が見事に的中して嬉しかった（？）です。&lt;/p&gt;
+&lt;p&gt;ただ、今回出ると予想していたOSコマンドインジェクションが出題されなかったので、次回は出ると思います。&lt;/p&gt;
+&lt;h3&gt;午後Ⅰ&lt;/h3&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;ルータの更新（BGPとOSPF、VRRP）&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;ネットワークの改善（NATとHTTP/2・HTTP/3・QUIC）&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;セキュアWebゲートウェイ（パケットフィルタリングとルーティング、証明書）&lt;/strong&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;午後Ⅰは１と３を選びました。
+というよりかは、２の図を見たときに「AP」という文字が飛び込んできて、とっさに「無線やんけ」と早とちりして回避した結果１と３になったという感じです。&lt;/p&gt;
+&lt;p&gt;解いた感想としては１と３はよくある午後Ⅰ問題です。&lt;/p&gt;
+&lt;p&gt;特にBGPとOSPFは近年よく出てきていたので、今年も出てくると予想していました。
+ただ、こうも頻出されると来年は傾向を変えてくるんじゃないかと疑いたくもなりますね。&lt;/p&gt;
+&lt;h3&gt;午後Ⅱ&lt;/h3&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;社内ネットワークのIPv6対応（IPv4・IPv6のデュアルスタック）&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;IoTシステム（LPWA・CoAP・DTLS）&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;ついにIPv6が出題されてしまいました。&lt;/p&gt;
+&lt;p&gt;正直今年出てくるとは思っていなかったのですが、IPv6なんか良さそうだな程度の理由で&lt;a href=&quot;https://www.lambdanote.com/collections/ipv6&quot;&gt;ラムダノートさんのプロフェッショナルIPv6&lt;/a&gt;を眺めていた時期があったので何とかなりました。&lt;/p&gt;
+&lt;p&gt;内容の難易度としてはグローバルユニキャストアドレスとリンクローカルアドレスがありますよとか、ルーターアドバタイズメントでプレフィックスを広告してSLAACでGUAを決定しますよという内容で、そこまでマニアックな内容ではないと思います。&lt;/p&gt;
+&lt;p&gt;「IPv6アドレスは〇〇ビットごとに：で区切る」の〇〇を答えよみたいな設問の下にIPv6アドレスの例が載っており数えればわかるじゃんみたいな問題も出てきていたので、知らないと手も足も出ないという難易度ではなかったと思います。&lt;/p&gt;
+&lt;p&gt;とはいえ、IPv4とはお作法が異なる世界なので、事前にある程度雰囲気を掴んでおかないと試験時間だけで何とかするのは厳しいと思います。&lt;/p&gt;
+&lt;p&gt;採点講評に『IPv6は普及が進んでいる技術なため、概要をしっかりと理解してほしい。』みたいなことを書かれると思うのと、今後は午後Ⅰに出題され始めると思うので概要だけでも掴んでおくといいと思います。&lt;/p&gt;
+&lt;h2&gt;ネットワークスペシャリストは役に立つか&lt;/h2&gt;
+&lt;p&gt;資格そのものを持っていると何か良いことがあるかというと、まぁ、特には無いのではないでしょうか。&lt;/p&gt;
+&lt;p&gt;即金的な方面で言うと、会社によって変わると思うので一概には言えませんが、弊社の場合は合格すると中学生のお小遣い程度の奨励金が出ます。
+合格までに要した時間で時給換算すると最低賃金をぶっちぎる位の金額なので、単純にお金が欲しいなら勉強時間をタイミーに充てたほうがよっぽどお金になります。つらたにえん&lt;/p&gt;
+&lt;p&gt;対して、よっぽどヤマを張る勉強方法とかで無ければネットワーク技術の割の広い範囲を勉強することになるので、普段自分が触らない技術についてある程度の理解は得られると思います。&lt;/p&gt;
+&lt;p&gt;普段の仕事では触らないような範囲の知識についても勉強することになるので、広く浅くにはなりますが知識を得られるというのはかなり役に立つと思います。
+もちろん、ネスペの知識だけで仕事が出来るわけではありませんが、何かの調査をするときの起点としては十分役に立つと思います。&lt;/p&gt;
+&lt;h2&gt;おわりに&lt;/h2&gt;
+&lt;p&gt;IPv6アドレスを何度も手書きさせるのは正直やめてほしいッピ&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>AWS Certified Solutions Architect - Associateに合格したお話</title>
+		<link href="https://www.jyuch.dev/posts/2025/07-04-saa-c03/"/>
+		<updated>2025-07-04T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/07-04-saa-c03/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;AWS Certified Solutions Architect - Associateに合格したので、その話についてです。&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2025/07-04-saa-c03/saa-c03.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;h2&gt;モチベーション&lt;/h2&gt;
+&lt;p&gt;本っ当にしょうもない理由なのですが、去年のAWS Summit Japanには認定者ラウンジというものが用意されていました。
+文字通りAWSの認定資格を持っている人が使えるというもので、使っている人たちを見て羨ましかったのを今でも覚えています。&lt;/p&gt;
+&lt;p&gt;今年のAWS Summit Japanにも参加出来るということで、それならば今年こそは認定者ラウンジを利用したいと思い取得したのが動機となります。&lt;/p&gt;
+&lt;p&gt;今年は認定者ラウンジはありませんでした。&lt;/p&gt;
+&lt;h2&gt;誰がこの認定を取るべきか？&lt;/h2&gt;
+&lt;p&gt;という半分冗談は置いておいて、どのような人がこの認定を取るべきでしょうか。&lt;/p&gt;
+&lt;p&gt;弊社は事業会社ですので、その視点で見るとベンダーにAWSを使用したシステム構築を依頼する担当者は持っておいて損はないと思います。&lt;/p&gt;
+&lt;p&gt;ベンダーに設計をお任せするとしても最終的な設計に対する責任はユーザー企業が負います。&lt;/p&gt;
+&lt;p&gt;その時、ベンダーから設計に関する説明を受ける際に「フロントにはAWS くぁｗせｄｒｆｔｇｙふじこｌｐを使用します。」「はぁ？」のようにヤギと猫のネットミームを幻視するのはあまりよろしくありません。&lt;/p&gt;
+&lt;p&gt;SAAでは主にサービスの種類や内容、そのサービスを利用する上での制限などが出題されます。
+つまり、SAAの内容を押さえておけばベンダーが使用を提案しているサービスの内容や制限がある程度分かるという訳です。&lt;/p&gt;
+&lt;p&gt;もちろん、ベンダーの担当者がｱﾚでなければ聞けばサービスの内容などは教えてくれるとは思います。
+ですが、いちいち聞くのは打ち合わせのテンポが悪くなりますし、「この人何もわかってないな」と思われるとベンダーの担当者の趣味全開の設計をブッ込まれる可能性もあります。&lt;/p&gt;
+&lt;h2&gt;おわりに&lt;/h2&gt;
+&lt;p&gt;認定シールをもらえたのでよしとします。&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>メインPCを更新したお話</title>
+		<link href="https://www.jyuch.dev/posts/2025/05-10-new-main-pc/"/>
+		<updated>2025-05-15T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/05-10-new-main-pc/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;メインPCを更新したのでそのことについてです。&lt;/p&gt;
+&lt;h2&gt;モチベーション&lt;/h2&gt;
+&lt;p&gt;使っているメインPCは大体7年前位に購入したもので、以下の問題を抱えていました。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Windows 11のサポート対象外で2025年10月以降は実質使えなくなる&lt;/li&gt;
+&lt;li&gt;検証用に仮想マシンをいくつか立ち上げた時に、CPUの処理が明らかに追いついていない時がある&lt;/li&gt;
+&lt;li&gt;モンハンワイルズが動かない&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;特にWindows 11のサポート対象外は流石にまずいので、直前に慌てるよりは少し余裕を持って更新しようというのが動機となります。&lt;/p&gt;
+&lt;h2&gt;次期PCに求める要件&lt;/h2&gt;
+&lt;p&gt;現行PCは主に検証用に仮想マシンを立てる使い方をしており、その使い方は踏襲します。
+また、瞬発的な処理能力も欲しいところです。&lt;/p&gt;
+&lt;p&gt;そのため、次期PCに求める要件は以下の通りとなりました。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;CPU
+&lt;ul&gt;
+&lt;li&gt;なるべく高い周波数で動作するマルチコアなCPUを採用する&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;メモリ
+&lt;ul&gt;
+&lt;li&gt;現行PCの倍となる128GBを最低とする&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;ストレージ
+&lt;ul&gt;
+&lt;li&gt;OSを格納する高速で動作するプライマリストレージ&lt;/li&gt;
+&lt;li&gt;仮想マシンを格納するSSDベースのセカンダリストレージ&lt;/li&gt;
+&lt;li&gt;アーカイブを格納するHDDベースの大容量ストレージ&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;こんな変な構成のPCは市販どころかBTOでも組めなさそうなので当然のように自作することになります。&lt;/p&gt;
+&lt;h2&gt;選定パーツ&lt;/h2&gt;
+&lt;p&gt;要件が固まったらパーツを選定していきます。&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;コンポーネント&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;メーカー&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;モデル&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;CPU&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;AMD&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Ryzen™ 9 9950X&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;メモリ&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Crucial&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Pro 128GB Kit (64GBx2) DDR5-5600 UDIMM&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;プライマリストレージ&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Sandisk&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;WD_BLACK SN850X 1TB&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;セカンダリストレージ&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Solidigm&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;P41 Plus 2TB&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;マザーボード&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;ASUS&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Prime X870-P WIFI-CSM&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;CPUクーラー&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;ARCTIC&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Liquid Freezer III - 360&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;PCケース&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Fractal Design&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;North XL&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;電源&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Corsair&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;RM850e&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;GPU&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;ASRock&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;RT7800XT Challenger 16GB OC&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h3&gt;CPU&lt;/h3&gt;
+&lt;p&gt;最近のIntel CPUはPコアと呼ばれる高い処理能力を持つコアとEコアと呼ばれる高効率コアの二つのコアのハイブリット構成となっています。&lt;/p&gt;
+&lt;p&gt;理念としては理解できるのですが、どうやらVMWare Workstation Proでコア間のスケジューリングに問題を抱えているという話をちらっと聞いたり、私自身もその周りでトラブルを抱えたくないなぁという思いから今回はAMDのCPUを採用することとしました&lt;/p&gt;
+&lt;p&gt;特に&lt;a href=&quot;https://www.amd.com/ja/products/processors/desktops/ryzen/9000-series/amd-ryzen-9-9950x.html&quot;&gt;AMD Ryzen™ 9 9950X&lt;/a&gt;は全部Pコア、コアいっぱい、高いクロック数というバカの考えた最強のCPUを地で行っており、要件的に最も近いためこちらを採用することとします。&lt;/p&gt;
+&lt;p&gt;なお、9950X君には上位存在の9950X3Dという3D V-Cacheを積んでいるモデルもありますが、売ってないものは買えないのと、別にゲーム性能はそこまで求めてないので今回は採用しませんでした。&lt;/p&gt;
+&lt;h3&gt;メモリ&lt;/h3&gt;
+&lt;p&gt;9950XはDDR5メモリ対応なのですが、4枚刺しだとメモリクロックが下がってしまうため出来れば2枚で運用したいところです。&lt;/p&gt;
+&lt;p&gt;と思いながらネットショップを徘徊していたら&lt;a href=&quot;https://www.crucial.jp/memory/ddr5/cp2k64g56c46u5&quot;&gt;Crucial Pro 128GB Kit (64GBx2) DDR5-5600 UDIMM&lt;/a&gt;の在庫が復活していたのでお買い上げしました。&lt;/p&gt;
+&lt;h3&gt;ストレージ&lt;/h3&gt;
+&lt;p&gt;プライマリストレージとして&lt;a href=&quot;https://shop.sandisk.com/ja-jp/products/ssd/internal-ssd/wd-black-sn850x-nvme-ssd?sku=WDS100T2X0E-00BCA0&quot;&gt;Sandisk WD_BLACK SN850X 1TB&lt;/a&gt;、セカンダリストレージとして&lt;a href=&quot;https://www.solidigmtechnology.jp/products/client/plus-series/p41.html&quot;&gt;Solidigm P41 Plus 2TB&lt;/a&gt;を選択しました。&lt;/p&gt;
+&lt;p&gt;ターシャリのHDDは家で余っていた4TBのHDDをWindows記憶域で2本ミラーで束ねて使っています。&lt;/p&gt;
+&lt;h3&gt;マザーボード&lt;/h3&gt;
+&lt;p&gt;上記のCPU、メモリ、ストレージが刺さるマザーボードで必要十分な性能を持つ（と思った）&lt;a href=&quot;https://www.asus.com/jp/motherboards-components/motherboards/csm/prime-x870-p-wifi-csm/&quot;&gt;ASUS Prime X870-P WIFI-CSM&lt;/a&gt;を採用します。&lt;/p&gt;
+&lt;h3&gt;CPUクーラー&lt;/h3&gt;
+&lt;p&gt;AMDのデータシート曰く、&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Liquid cooler recommended for optimal performance&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;とのことなので、今回は簡易水冷クーラーを投入することとしました。&lt;/p&gt;
+&lt;p&gt;簡易水冷は消耗部品ということらしいので、ハイエンドを投入するのではなく数年で置き換える前提でそこそこの値段で評判のよさそうな&lt;a href=&quot;https://www.arctic.de/en/Liquid-Freezer-III-360/ACFRE00136A&quot;&gt;ARCTIC Liquid Freezer III - 360&lt;/a&gt;を採用します。&lt;/p&gt;
+&lt;p&gt;なお、このモデルはクーラーヘッドの上に周辺パーツの冷却用のファンが載っているのですが、マザーボードによっては干渉してしまうこともあるようなので事前に確認してから買うと良いと思います。&lt;/p&gt;
+&lt;p&gt;また、私が買ったときはCPUグリスのMX6が添付されていましたので、確認してから買うと無駄に別途CPUグリスを買ってしまう悲劇をさけられると思います。（1敗）&lt;/p&gt;
+&lt;h3&gt;PCケース&lt;/h3&gt;
+&lt;p&gt;今回採用した簡易水冷クーラーのラジエータサイズが360mmと大型なので、このラジエータを無理なく納められるケースとして&lt;a href=&quot;https://www.fractal-design.com/ja/products/cases/north/north-xl/chalk-white/&quot;&gt;Fractal Design North XL&lt;/a&gt;を採用しました。&lt;/p&gt;
+&lt;p&gt;見た目もいいかんじです。&lt;/p&gt;
+&lt;h3&gt;電源&lt;/h3&gt;
+&lt;p&gt;電源は今まで使ってきて安心感のあるCorsairから選びました。&lt;/p&gt;
+&lt;p&gt;多分850Wあれば足りるだろうということで&lt;a href=&quot;https://www.corsair.com/jp/ja/p/psu/cp-9020296-jp/rme-series-rm850e-fully-modular-low-noise-atx-power-supply-jp-cp-9020296-jp&quot;&gt;Corsair RM850e&lt;/a&gt;をチョイス。&lt;/p&gt;
+&lt;h3&gt;GPU&lt;/h3&gt;
+&lt;p&gt;なんとなく目についたので&lt;a href=&quot;https://asrock.com/Graphics-Card/AMD/Radeon%20RX%207800%20XT%20Challenger%2016GB%20OC/index.jp.asp&quot;&gt;ASRock RT7800XT Challenger 16GB OC&lt;/a&gt;をチョイス。&lt;/p&gt;
+&lt;p&gt;Challengerとはどの立ち位置のブランドなのか、オーバークロックだと何が変わるのか、何も分からずに使っています。&lt;/p&gt;
+&lt;p&gt;モンハンが動けばいいんすよ&lt;/p&gt;
+&lt;h2&gt;組み立て&lt;/h2&gt;
+&lt;p&gt;North XLはサイズは大きいですが内部の容積も大きく、大型の簡易水冷でも無理なく取り回せます。
+そのため、初めて簡易水冷で組みましたがとくにトラブルも無く組むことが出来ました。&lt;/p&gt;
+&lt;h3&gt;好きなインシュロック発表ドラゴン&lt;/h3&gt;
+&lt;p&gt;マザーボードなどのパーツには結束バンドが何本か添付されていますが、今回の組み立てでは別途購入した&lt;a href=&quot;https://www.hellermanntyton.co.jp/product/cabletie/a01_ab/ab_w.html&quot;&gt;AB80-W&lt;/a&gt;を使用しました。
+ホームセンターでも一つ300円程度で売られていると思います。&lt;/p&gt;
+&lt;p&gt;たくさん用意しておくとケーブルのハンドリングをするのに気兼ねなく使えます。
+また、PCケースにケーブルを固定する際にも先端に角度が付けられているので結束しやすいという利点もあります。&lt;/p&gt;
+&lt;p&gt;今回の組み立て作業時の組み立てやすさの何割かはインシュロックに助けられている部分があるので、個人的にはおすすめのPCパーツ（？）です。&lt;/p&gt;
+&lt;h3&gt;初回起動時の起動時間&lt;/h3&gt;
+&lt;p&gt;容量の大きなメモリを積むと初回起動時に画面が表示されるまで時間が掛かると言われていましたが、この構成ではたしか10分位で最初の表示が行われていたと思います。&lt;/p&gt;
+&lt;h2&gt;OSのインストール&lt;/h2&gt;
+&lt;p&gt;あとは普通にWindowsとドライバをインストールすれば完了です。&lt;/p&gt;
+&lt;p&gt;ドライバはASUS DriverHubというものでマザーボード用ドライバをインストールした後、AMD Software: Adrenalin Edition経由でチップセットドライバとグラボドライバを更新しました。
+これが正しい手順かどうかはよくわかっていません。&lt;/p&gt;
+&lt;h2&gt;ベンチマーク&lt;/h2&gt;
+&lt;p&gt;最後に性能を測ります。&lt;/p&gt;
+&lt;p&gt;よくあるのはCinebenchですが、まぁ自作のツールでベンチマークしてもいいよねって事で&lt;a href=&quot;https://www.jyuch.dev/posts/2025/01-02-shrink-image-size-using-rust/&quot;&gt;自作の画像変換ツール&lt;/a&gt;の処理時間で確認してみましょう。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-txt&quot;&gt;&amp;gt; Measure-Command { cwebp.exe -i .&#92;input&#92; -o .&#92;output&#92; }
+
+
+Days              : 0
+Hours             : 0
+Minutes           : 10
+Seconds           : 52
+Milliseconds      : 837
+Ticks             : 6528379424
+TotalDays         : 0.0075559947037037
+TotalHours        : 0.181343872888889
+TotalMinutes      : 10.8806323733333
+TotalSeconds      : 652.8379424
+TotalMilliseconds : 652837.9424
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-txt&quot;&gt;&amp;gt; Measure-Command { cwebp.exe -i .&#92;input&#92; -o .&#92;output&#92; }
+
+
+Days              : 0
+Hours             : 0
+Minutes           : 3
+Seconds           : 2
+Milliseconds      : 843
+Ticks             : 1828432412
+TotalDays         : 0.00211624121759259
+TotalHours        : 0.0507897892222222
+TotalMinutes      : 3.04738735333333
+TotalSeconds      : 182.8432412
+TotalMilliseconds : 182843.2412
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;同じ画像セットに対して処理を行いました。
+11分から3分と大体3.6倍の性能向上となっています。&lt;/p&gt;
+&lt;p&gt;なお、9950Xの方はCPUの使用率が30～50%のあたりをうろうろしていました。
+この辺は私の作りこみが甘い部分があるのでもう少し頑張ればもっと性能差は開きそうです。&lt;/p&gt;
+&lt;h2&gt;おわりに&lt;/h2&gt;
+&lt;p&gt;これからはこのメインPC君にいろいろ頑張ってもらいましょう。&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>Rustでも画像がカラーかモノクロか判別したい</title>
+		<link href="https://www.jyuch.dev/posts/2025/01-19-determine-color-or-monochrome/"/>
+		<updated>2025-01-19T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/01-19-determine-color-or-monochrome/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://www.jyuch.dev/posts/2025/01-02-shrink-image-size-using-rust/&quot;&gt;前回&lt;/a&gt;では画像をavifにして縮小する方法を確認したのですが、よくよく確認してみると明らかにモノクロ画像なのにカラープロファイルで保存されている画像とかもちらほらあったんですよね。&lt;/p&gt;
+&lt;p&gt;じゃあカラー画像かモノクロ画像か判別して、モノクロならビット深度を8bitに落とせばもっとサイズを縮小出来るのではということでカラーかモノクロか判別する方法を確認してみました。&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://takuya-1st.hatenablog.jp/entry/2023/04/05/230317&quot;&gt;画像が、白黒かカラーか判定する。(白黒に近いスキャン画像を判定する）- それマグで！&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;HSV（HSB）色空間に変換して、S(Saturation)×V(Value)の値を閾値で2値化してその平均値で判定すればうまく行くとのことです。&lt;/p&gt;
+&lt;h2&gt;HSV色空間&lt;/h2&gt;
+&lt;p&gt;さて、前回に引き続き画像ライブラリにはimage-rsを使っているので、HSV色空間に変換するメソッドがあれば一発で終わります。ありませんでした&lt;/p&gt;
+&lt;p&gt;ただ、RGBからHSVに変換するのはそんなに難しくないので、ここでは愚直に実装していきます。&lt;/p&gt;
+&lt;p&gt;RGB用に以下の&lt;code&gt;max&lt;/code&gt;、&lt;code&gt;min&lt;/code&gt;なヘルパメソッドを定義して、&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;fn max(r: u8, g: u8, b: u8) -&amp;gt; u8 {
+    if r &amp;gt; g &amp;amp;&amp;amp; r &amp;gt; b {
+        r
+    } else if g &amp;gt; b &amp;amp;&amp;amp; g &amp;gt; r {
+        g
+    } else {
+        b
+    }
+}
+
+fn min(r: u8, g: u8, b: u8) -&amp;gt; u8 {
+    if r &amp;lt; g &amp;amp;&amp;amp; r &amp;lt; b {
+        r
+    } else if g &amp;lt; b &amp;amp;&amp;amp; g &amp;lt; r {
+        g
+    } else {
+        b
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;定義通りにSとVを計算するメソッドを実装します。
+なお、値域は文献によってまちまちなのですが、ここでは0から255までとして計算しています。&lt;/p&gt;
+&lt;p&gt;また、今回の計算ではHは使用しないので実装していません。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;fn v(r: u8, g: u8, b: u8) -&amp;gt; u8 {
+    max(r, g, b)
+}
+
+fn s(r: u8, g: u8, b: u8) -&amp;gt; u8 {
+    let v = v(r, g, b);
+
+    if v == 0 {
+        0
+    } else {
+        (255f64 * ((max(r, g, b) as f64 - min(r, g, b) as f64) / max(r, g, b) as f64)) as u8
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;判定&lt;/h2&gt;
+&lt;p&gt;あとは画像を読み込んで1ピクセル毎にHSV色空間に変換して閾値から2値化して平均すれば完了です。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;fn is_monochrome(img: &amp;amp;DynamicImage) -&amp;gt; f64 {
+    let img = img.clone().into_rgb8();
+    let mut sum = 0u32;
+    let mut n = 0u32;
+
+    // 2値化するときの閾値（今回は10%を使用している）
+    let threshold = (256f64 * 256f64 * 0.1) as u32;
+    for (_, _, pixel) in img.enumerate_pixels() {
+        let r = pixel.0[0];
+        let g = pixel.0[1];
+        let b = pixel.0[2];
+
+        // HSV色空間に変換
+        let v = v(r, g, b);
+        let s = s(r, g, b);
+        let sv = s as u32 * v as u32;
+
+        // 2値化
+        if sv &amp;gt; threshold {
+            sum += 1;
+        }
+        n += 1;
+    }
+    
+    // 平均を計算
+    let mean = sum as f64 / n as f64;
+    mean
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;結果が0よりも大きければカラー、0ならモノクロと判別出来ると思います。たぶん&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/jyuch/is-monochrome&quot;&gt;is-monochrome&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>RustでもAVIFフォーマットに変換して画像サイズを縮小したい</title>
+		<link href="https://www.jyuch.dev/posts/2025/01-02-shrink-image-size-using-rust/"/>
+		<updated>2025-01-02T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/01-02-shrink-image-size-using-rust/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;Rustとimage-rsを使ってjpeg画像などをAVIFフォーマットに変換して画像サイズを縮小するツールを作成したのでそれについてです。&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/jyuch/cwebp&quot;&gt;cwebp&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;自炊したスキャン画像があり、普段はPCで参照していたのでWindows標準の画像ビューワで見ていました。
+しかし、諸般の事情で手元のiPhoneでも見れたほうがいいよねってことで画像ファイルを本ごとにブラウザで見れるようにSSGを使ってHTMLに起こしました。&lt;/p&gt;
+&lt;p&gt;宅内からでしか参照しないのでオリジナルサイズの画像をそのまま貼り付けても良かったのですが、画像数が32000程度あり取り回しやサーバへの転送でつらみポイントが高めだったので、ナウでヤングなファイルフォーマットを使って取り回しを良くしたいというのが作った動機です。&lt;/p&gt;
+&lt;p&gt;また、単純に画像を変換するだけならImageMagicを使えば良いと思いますが、画像を保存しているディレクトリ構造を保ったまま一括で変換してほしかったのでツールを作成しました。&lt;/p&gt;
+&lt;p&gt;最初はWebPフォーマットにしようとしましたが、ビット深度を落としてもオリジナルサイズの2倍くらいのサイズになってしまうのでAVIFフォーマットに切り替えたという経緯があります。&lt;/p&gt;
+&lt;h2&gt;使用ライブラリ&lt;/h2&gt;
+&lt;p&gt;Rustでの画像操作ライブラリは&lt;a href=&quot;https://github.com/image-rs/image&quot;&gt;image-rs&lt;/a&gt;を使っています。&lt;/p&gt;
+&lt;p&gt;オリジナルファイルは残す前提なので、ファイルサイズを縮小することを優先して変換を掛けています。&lt;/p&gt;
+&lt;p&gt;書籍系の画像なのでアルファチャネルは不要で、カラーはRGBでビット深度が24bit、モノクロははビット深度を8bitに落としています。&lt;/p&gt;
+&lt;p&gt;image-rsは書き出し時に指定するパスのファイルの拡張子からフォーマットを決めてくれるので、出力パスを決定する段階で拡張子&lt;code&gt;.avif&lt;/code&gt;を付けています。&lt;/p&gt;
+&lt;p&gt;また、これは完全に私の管理が悪いのですが、たまに拡張子とファイルフォーマットが一致していないファイルがあったりします。
+そのため、画像を読み込むときは拡張子から読み込むフォーマットを決めているのではなく、ファイルから読み込んだ中身からファイルフォーマットを類推させています。&lt;/p&gt;
+&lt;p&gt;あとは、画像サイズをコマンドラインパラメータから指定できるようにし、画像サイズの縮小も同時に行っています。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rs&quot;&gt;fn convert(
+    input: impl AsRef&amp;lt;Path&amp;gt;,
+    output: impl AsRef&amp;lt;Path&amp;gt;,
+    width: Option&amp;lt;u32&amp;gt;,
+    height: Option&amp;lt;u32&amp;gt;,
+) -&amp;gt; anyhow::Result&amp;lt;()&amp;gt; {
+    let content = fs::read(&amp;amp;input)?;
+    let img = ImageReader::new(Cursor::new(&amp;amp;content))
+        .with_guessed_format()?
+        .decode()?;
+
+    let (cur_width, cur_height) = img.dimensions();
+    let new_width = width.unwrap_or(cur_width);
+    let new_height = height.unwrap_or(cur_height);
+    let img = img.resize(new_width, new_height, FilterType::Lanczos3);
+
+    let img: DynamicImage = match img.color() {
+        ColorType::L8 | ColorType::La8 | ColorType::L16 | ColorType::La16 =&amp;gt; {
+            DynamicImage::from(img.into_luma8())
+        }
+        ColorType::Rgb8
+        | ColorType::Rgba8
+        | ColorType::Rgb16
+        | ColorType::Rgba16
+        | ColorType::Rgb32F
+        | ColorType::Rgba32F =&amp;gt; DynamicImage::from(img.into_rgb8()),
+        _ =&amp;gt; unreachable!(),
+    };
+
+    img.save(output)?;
+    Ok(())
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;縮小比と処理時間&lt;/h2&gt;
+&lt;p&gt;AVIFフォーマットの画像縮小は効果てきめんで、カラーならオリジナル比で40%、モノクロで60%くらいまで縮んでくれます。&lt;/p&gt;
+&lt;p&gt;ただし、処理時間がWebPフォーマットなどの比べるととても遅く、1ファイル当たり平均で811msくらい掛かります。
+PNGなどが大体14mくらいなので、まぁ、うん、その、ねぇ・・・&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+</feed>
