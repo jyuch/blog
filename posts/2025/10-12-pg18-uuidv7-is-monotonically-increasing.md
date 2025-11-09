@@ -7,20 +7,20 @@ tags:
   - postgres
 ---
 
-# 長いので先にまとめ
+## 長いので先にまとめ
 
 - UUIDv7は[RFC9562](https://datatracker.ietf.org/doc/html/rfc9562)上ではミリ秒精度のタイムスタンプを持つことを要求している
 - また、オプショナルとして`rand_a`及び`rand_b`の生成方法を工夫して単調増加を保証しても良いとされている
 - PostgreSQL 18 の`uuidv7()`関数はRFC9562のSection 6.2 Method 3で提案されているタイムスタンプをサブミリ秒まで拡張する方法で単調増加を保証している
   - サブミリ秒レベルでタイムスタンプが衝突した場合は、最小精度でインクリメントすることでタイムスタンプの衝突を回避している
 
-# はじめに
+## はじめに
 
 最近リリースされたPostgreSQL 18 で UUIDv7 の生成がサポートされました。
 
 個人的にはUUIDが生成順にソート可能になるうれしさがよく分からないのですが、いざ使うことになった際に困らないように調べてみることにしました。
 
-# UUIDv7
+## UUIDv7
 
 そもそも、UUIDv7はどのような構造をしているのでしょうか。
 
@@ -55,7 +55,7 @@ RFCが最低限求めている仕様では、タイムスタンプはミリ秒�
 
 そのため、[6.2. Monotonicity and Counters](https://datatracker.ietf.org/doc/html/rfc9562#name-monotonicity-and-counters)では、高頻度でのUUIID生成環境下での単調増加性を保証するための方法が提案されています。
 
-# PostgreSQL 18 の UUIDv7
+## PostgreSQL 18 の UUIDv7
 
 PostgreSQL 18 の`uuidv7()`関数はミリ秒タイムスタンプ + サブミリ秒タイムスタンプ + ランダム値で計算されていることが[ドキュメントに記載されています。](https://www.postgresql.org/docs/18/functions-uuid.html#FUNC_UUID_GEN_TABLE)
 
@@ -197,7 +197,7 @@ fn uuidv7_to_timestamp(uuidv7: &str) -> (i64, i64) {
 
 [jyuch/pg-uuidv7-to-timestamp](https://github.com/jyuch/pg-uuidv7-to-timestamp)
 
-# PostgreSQL 18 でのUUIDv7生成例
+## PostgreSQL 18 でのUUIDv7生成例
 
 最後に実際に`uuidv7()`関数を使ってUUIDv7を生成して、単調増加しているかを確認してみましょう。
 

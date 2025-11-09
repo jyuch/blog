@@ -8,7 +8,7 @@ tags:
   - otlp
 ---
 
-# 2024年12月29日追記
+## 2024年12月29日追記
 
 RustのOpenTelemetryライブラリはまだ安定化されておらず、割とドラスティックにAPIが更新されています。
 
@@ -16,7 +16,7 @@ RustのOpenTelemetryライブラリはまだ安定化されておらず、割と
 
 拙作のadvoidの[trace.rs](https://github.com/jyuch/advoid/blob/master/src/trace.rs)は割と最近のバージョンへの追従を頑張っているので、良かったらそちらを参考にしてみてください。
 
-# はじめに
+## はじめに
 
 テキストベースのロギングは時代遅れ、時代はOpenTelemetryを使ったハイカラな計装！！ということでタイトル通りに試してみます。
 
@@ -24,7 +24,7 @@ RustのOpenTelemetryライブラリはまだ安定化されておらず、割と
 
 [RustでOpenTelemetryをはじめよう](https://blog.ymgyt.io/entry/starting_opentelemetry_with_rust/)
 
-# OpenTelemetry
+## OpenTelemetry
 
 OpenTelemetryはそれぞれの監視ツールベンダが提供してきたAPIを共通化し、アプリケーションコードから可能な限りベンダ固有のコードを除去することを目的としてる。と個人的に認識しています。
 
@@ -50,7 +50,7 @@ endlocal
 
 みたいなバッチを作っておくとサクッと立ち上げられるので便利です。
 
-# tracingの初期化
+## tracingの初期化
 
 今回はトレーシングライブラリとして[tokio-rs/tracing](https://github.com/tokio-rs/tracing)を使用します。
 
@@ -133,7 +133,7 @@ pub(crate) fn init_tracing(service: &'static str, version: &'static str) -> Otel
 }
 ```
 
-# アプリケーションコード
+## アプリケーションコード
 
 起動時にOpenTelemetryの初期化さえしてしまえば、あとは普通にtracingを使うだけです。
 

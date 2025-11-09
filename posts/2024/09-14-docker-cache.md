@@ -7,20 +7,20 @@ tags:
   - docker
 ---
 
-# はじめに
+## はじめに
 
 しばらくぶりにDockerに触ったらなんかいろいろとキャッシュ周りが変わっていたのでそれについてです。
 
-# Buildx
+## Buildx
 
 どうも最近のDockerはMoby BuildKitを`docker`コマンドから透過的に扱えるようになったようです。
 そして、BuildKitをDockerから使うための拡張がBuildxです。
 
 BuildKit君はいい感じにキャッシュを扱えるようなので、その辺を確認してみましょう。
 
-# パッケージマネージャ
+## パッケージマネージャ
 
-## APT
+### APT
 
 昔は`apt-get`コマンドを鬼のように`&&`で連結して、最後に`rm -rf /var/lib/apt/lists/*`でキャッシュファイルを消し飛ばしてイメージをコンパクションするのがノウハウでした。
 
@@ -54,7 +54,7 @@ Dockerだとキャッシュが刺さってイメージが肥大化するから`a
 
 `rm -rf /var/lib/apt/lists/*`は無駄だったって事すか
 
-## DNF
+### DNF
 
 DNF君も基本的には同じです。
 
@@ -71,7 +71,7 @@ RUN --mount=type=cache,target=/var/cache/dnf \
       gcc gcr lvm2 clang
 ```
 
-## YUM
+### YUM
 
 CentOS7がEoLを迎えてもう`yum`コマンドを打つ機会はない。そんなふうに考えていた時期が俺にもありました
 
@@ -87,9 +87,9 @@ RUN --mount=type=cache,target=/var/cache/yum \
       gcc gcr lvm2 clang
 ```
 
-# ビルドシステム
+## ビルドシステム
 
-## Rust
+### Rust
 
 ビルド激重Rust君です。
 
@@ -119,7 +119,7 @@ ENTRYPOINT ["/bin/hello_rust"]
 
 あとはいつものように最終的なイメージをビルドしているステージに成果物を送り込めば完了です。
 
-## Python
+### Python
 
 最近触っているのでまぁ一応Pythonも確認してみましょう。
 

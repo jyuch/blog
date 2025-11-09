@@ -8,14 +8,14 @@ tags:
   - dns
 ---
 
-# はじめに
+## はじめに
 
 DNSは春の季語なので、[Hickory DNS](https://github.com/hickory-dns/hickory-dns)を使用してDNS Forwarderを実装する方法を確認してみました。
 
 とにかくドキュメントの整備が追い付いていないので、困ったらソースコードを読みましょう。これがオープンソースの強みですね（）
 
 
-# とりあえず適当な値を返す
+## とりあえず適当な値を返す
 
 Hickory DNSでのサーバ実装は`hickory_server`クレートで実装されています。
 
@@ -164,7 +164,7 @@ www.jyuch.dev.          3600    IN      A       203.0.113.1
 ```
 
 
-# DNS Fordingする
+## DNS Fordingする
 
 DNSのクライアント側の実装は`hickory_client`クレートにあります。
 
@@ -310,7 +310,7 @@ jyuch.github.io.        3600    IN      A       185.199.110.153
 ;; MSG SIZE  rcvd: 124
 ```
 
-# 追記その１
+## 追記その１
 
 リクエストヘッダをそのままレスポンスヘッダとして打ち返していましたが、そうするとsystemd-resolvedが受け取り拒否します。
 Windowsはあんまり気にしていないみたいですけど。
@@ -334,7 +334,7 @@ digの結果の一行目に警告が載ってましたね・・・
 ;; Warning: query response not set
 ```
 
-# 追記その２
+## 追記その２
 
 単純に`Header::response_from_request`するとレスポンスヘッダに再起フラグが立たないので、上位DNSからのレスポンスヘッダに再起フラグが立っていたら立ててあげる必要があるようです。
 

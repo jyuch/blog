@@ -7,7 +7,7 @@ tags:
   - jdk
 ---
 
-# はじめに
+## はじめに
 
 OpenJDKの中身をいじって検証する必要があったので、WindowsでOpenJDKを野良ビルドする方法を確認してみました。
 
@@ -17,7 +17,7 @@ OpenJDKの中身をいじって検証する必要があったので、Windowsで
 
 古いバージョンだと過去のVisual StudioとかWindowsバージョンが必要っぽいですが、流石に個人でVisual Studio Subscriptionを契約していないので基本的にWindows 11 + Visual Studio 2022でビルドしていきます。
 
-# 必要なもの
+## 必要なもの
 
 OpenJDKの公式リファレンス曰く、英語版のWindowsのみを公式でサポートしているらしいです。
 そのため、何らかの合法的な手段で英語版のWindowsを調達するか、ロケールを英語に変更してください。
@@ -38,7 +38,7 @@ OpenJDKの公式リファレンス曰く、英語版のWindowsのみを公式で
 
 ソースをzipで落としてくるのであれば、ファイル数がとても多いので7zipなどのアーカイバを使って解凍したほうがいいかもしれません。
 
-# ビルド
+## ビルド
 
 どのバージョンでも`build\windows-x86_64-server-release\jdk`にバイナリが吐かれています。
 
@@ -46,7 +46,7 @@ OpenJDKの公式リファレンス曰く、英語版のWindowsのみを公式で
 
 あと、ビルドに時間が掛かるからって調子に乗って複数バージョンの同時ビルドを流すと、たまにテストがタイムアウトしてError扱いになるので注意しましょう。（4敗）
 
-## OpenJDK 23 (23.0.1-11)
+### OpenJDK 23 (23.0.1-11)
 
 最新ならとっても簡単です。
 
@@ -61,7 +61,7 @@ bash configure \
 make all; make test-tier1
 ```
 
-## OpenJDK 22 (22.0.2-9)
+### OpenJDK 22 (22.0.2-9)
 
 22までならなんの捻りもなくビルドが通ります。
 
@@ -76,7 +76,7 @@ bash configure \
 make all; make test-tier1
 ```
 
-## OpenJDK 21 (21.0.6-6)
+### OpenJDK 21 (21.0.6-6)
 
 最新のLTSですが、googletestを有効にするとビルドに失敗するようになります。
 ここから雲行きが怪しくなります。
@@ -95,7 +95,7 @@ googletestを無効化したせいでいくつかのhotspotテストが失敗と
 make all; make test-tier1
 ```
 
-## OpenJDK 20 (20.0.2-ga)
+### OpenJDK 20 (20.0.2-ga)
 
 ビルド中にワーニング出てきて若干不穏な感じになりますが、まぁビルドが通るので良しとしましょう。
 
@@ -111,7 +111,7 @@ bash configure \
 make all; make test-tier1
 ```
 
-## OpenJDK 19 (19.0.2-ga)
+### OpenJDK 19 (19.0.2-ga)
 
 ```sh
 bash configure \
@@ -123,7 +123,7 @@ bash configure \
 make all; make test-tier1
 ```
 
-## OpenJDK 18 (18.0.2.1-0)
+### OpenJDK 18 (18.0.2.1-0)
 
 ```sh
 bash configure \
@@ -135,7 +135,7 @@ bash configure \
 make all; make test-tier1
 ```
 
-## OpenJDK 17 (17.0.14-6)
+### OpenJDK 17 (17.0.14-6)
 
 ```sh
 bash configure \
@@ -147,7 +147,7 @@ bash configure \
 make all; make test-tier1
 ```
 
-## OpenJDK 16 (16.0.2-ga)
+### OpenJDK 16 (16.0.2-ga)
 
 Visual Studioのビルド環境の検出に失敗して`bash configure`自体が失敗します。
 
@@ -163,7 +163,7 @@ configure: error: Cannot locate a valid Visual Studio installation
 configure exiting with result code 1
 ```
 
-## OpenJDK 11 (11.0.26-3)
+### OpenJDK 11 (11.0.26-3)
 
 11はまだビルドが通ります。
 いつまで使う気なんでしょうね
@@ -178,7 +178,7 @@ bash configure \
 make all; make run-test-tier1
 ```
 
-## OpenJDK 8 (jdk8u442-b04)
+### OpenJDK 8 (jdk8u442-b04)
 
 `u442`ってもはや何なんだよって感じです
 
