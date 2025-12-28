@@ -7,6 +7,7 @@ tags:
   - python
   - gen-ai
   - databricks
+  - dspy
 ---
 
 ## はじめに
