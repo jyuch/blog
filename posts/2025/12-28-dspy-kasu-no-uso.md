@@ -2,7 +2,7 @@
 title: ダウナー系生成AIに毎日カスの嘘を流し込まれたい
 description: DSPyのGEPAを使って「カスの嘘」を生成するようにプロンプト自動最適化を行います。
 date: 2025-12-28
-lastModified: 2025-12-28
+lastModified: 2025-12-31
 tags: 
   - python
   - gen-ai
@@ -197,7 +197,7 @@ LLM as Judge自体をMIPROなりGEPAなりで最適化する手法もありま�
 
 生成AIにしょうもない嘘をつかせるのも安くはないですね・・・
 
-![カスの嘘をつかせるために28ドル掛かりました](/img/2025/12-21-dspy-kasu-no-uso/claude.png)
+![カスの嘘をつかせるために28ドル掛かりました](/img/2025/12-21-dspy-kasu-no-uso/コスト.png)
 
 - [jyuch/dspy-kasu-no-uso](https://github.com/jyuch/dspy-kasu-no-uso)
 
