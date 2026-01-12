@@ -2,7 +2,7 @@
 title: ダウナー系生成AIに毎日カスの嘘を流し込まれたい
 description: DSPyのGEPAを使って「カスの嘘」を生成するようにプロンプト自動最適化を行います。
 date: 2025-12-28
-lastModified: 2025-12-31
+lastModified: 2025-01-12
 tags: 
   - python
   - gen-ai
@@ -169,6 +169,15 @@ gpt-ossはやたら江戸時代の話題をしたがりますが、全体的に�
 |gpt-oss-20b|東京タワー|東京タワーは、実は昭和初期に東京郊外の灯台の設計図を活用して作られたらしいよ|
 |haiku-4-5|東京タワー|実は、東京タワーは元々、戦後の電波障害を調査するための実験施設だったんだって|
 
+## クロス評価
+
+それぞれのモデルに最適なプロンプトが求められたので、プロンプトをそれぞれモデルに適用してスコアがどのようになるか評価してみました。
+
+どのモデルでもモデルに最適化されたプロンプトを使用したときが最も高いスコアを出していることが分かります。
+また、gpt-oss-20bのようにパラメータ数が小さいモデルで最適なプロンプトとそれ以外のプロンプトでのスコアの差が大きくなることが分かります。
+
+![クロス評価結果](/img/2025/12-21-dspy-kasu-no-uso/cross-eval.png)
+
 ## 一通り試してみての感想
 
 ここからは一通り試してみての感想です。
@@ -199,11 +208,11 @@ LLM as Judge自体をMIPROなりGEPAなりで最適化する手法もありま�
 
 ![カスの嘘をつかせるために28ドル掛かりました](/img/2025/12-21-dspy-kasu-no-uso/コスト.png)
 
-- [jyuch/dspy-kasu-no-uso](https://github.com/jyuch/dspy-kasu-no-uso)
+[jyuch / dspy-kasu-no-uso](https://github.com/jyuch/dspy-kasu-no-uso)
 
 おわり
 
 ## 参考資料
 
-- [mahm/dspy-demo](https://github.com/mahm/dspy-demo)
+- [mahm / dspy-demo](https://github.com/mahm/dspy-demo)
 - [はじめてのDSPy - 株式会社ジェネラティブエージェント 西見公宏](https://speakerdeck.com/masahiro_nishimi/dspy-meetup-tokyo-number-1-hazimetenodspy)
