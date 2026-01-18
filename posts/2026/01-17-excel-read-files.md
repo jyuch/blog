@@ -1,7 +1,7 @@
 ---
 title: Databricksのread_files関数でもExcelファイルを読み込みたい
 description: Databricksのread_files関数でExcelファイルを読み込む際の挙動について評価しました。
-date: 2026-01-18
+date: 2026-01-17
 lastModified: 2026-01-18
 tags: 
   - databricks
