@@ -5,7 +5,7 @@ on:
     branches: [ master ]
 
 env:
-  BUILD_FOR: publish
+  ENABLE_GOOGLE_ANALYTICS: true
 
 jobs:
   build:

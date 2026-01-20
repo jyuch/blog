@@ -33,7 +33,7 @@ site
   .use(minifyHTML())
   .add([".scss"]);
 
-const isProduction = Deno.env.get("BUILD_FOR") === "publish";
-site.data("isProduction", isProduction);
+const isEnableGoogleAnalytics = Deno.env.get("ENABLE_GOOGLE_ANALYTICS") === "true";
+site.data("isEnableGoogleAnalytics", isEnableGoogleAnalytics);
 
 export default site;
