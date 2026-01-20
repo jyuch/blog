@@ -4,6 +4,9 @@ on:
   push:
     branches: [ master ]
 
+env:
+  ENV: 'production'
+
 jobs:
   build:
     runs-on: ubuntu-latest

@@ -33,4 +33,7 @@ site
   .use(minifyHTML())
   .add([".scss"]);
 
+const isProduction = Deno.env.get("ENV") === "production";
+site.data("isProduction", isProduction);
+
 export default site;
