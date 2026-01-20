@@ -1,0 +1,132 @@
+<!doctype html><html lang=ja><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0" name=viewport><title>RustでもOTLPでJaegerにテレメトリを送りたい - レンコン畑でつかまえて</title><meta content=RustからOpenTelemetryプロトコルを使用してJaegerにテレメトリを送る方法を確認します name=description><link href=/pagefind/pagefind-ui.css rel=stylesheet><link href=/styles.css rel=stylesheet><link href=/feed.xml rel=alternate title=レンコン畑でつかまえて type=application/atom+xml><link href=/feed.json rel=alternate title=レンコン畑でつかまえて type=application/json><script src="https://www.googletagmanager.com/gtag/js?id=G-1F9LYQGGMB" async></script><script>window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-1F9LYQGGMB');</script><script src=/pagefind/pagefind-ui.js></script><script>window.addEventListener('DOMContentLoaded',()=>{new PagefindUI({"element":"#search","showImages":false,"excerptLength":0,"showEmptyFilters":true,"showSubResults":false,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"});});</script><body><nav class=navbar><a class=navbar-home href=/> <strong>レンコン畑でつかまえて</strong> </a><ul class=navbar-links><li><a href=/> Home </a><li><a href=/posts/> Archive </a><li><a href=https://about.jyuch.dev/> About Me </a></ul><div class=navbar-search><div id=search></div></div></nav><main class=body-post><article class=post data-pagefind-body><div class=post-header><h1 class=post-title>RustでもOTLPでJaegerにテレメトリを送りたい</h1><nav class=post-tags><a class=tag href=/tags/rust/>rust</a><a class=tag href=/tags/otlp/>otlp</a></nav><time datetime="2023-09-18 00:00:00" class=post-date> September 18th, 2023 </time></div><div class=post-body><h2>2024年12月29日追記</h2><p>RustのOpenTelemetryライブラリはまだ安定化されておらず、割とドラスティックにAPIが更新されています。<p>そのため、現時点の最新のライブラリを使おうとして下のコードをコピペしてもビルドが通らないと思います。<p>拙作のadvoidの<a href=https://github.com/jyuch/advoid/blob/master/src/trace.rs>trace.rs</a>は割と最近のバージョンへの追従を頑張っているので、良かったらそちらを参考にしてみてください。<h2>はじめに</h2><p>テキストベースのロギングは時代遅れ、時代はOpenTelemetryを使ったハイカラな計装！！ということでタイトル通りに試してみます。<p>とはいってもRust関係でまとまった記事を書いてくださってるのは以下のブログくらいみたいなので、とりあえずは以下の記事を参考に試してみます。<p><a href=https://blog.ymgyt.io/entry/starting_opentelemetry_with_rust/>RustでOpenTelemetryをはじめよう</a><h2>OpenTelemetry</h2><p>OpenTelemetryはそれぞれの監視ツールベンダが提供してきたAPIを共通化し、アプリケーションコードから可能な限りベンダ固有のコードを除去することを目的としてる。と個人的に認識しています。<p>例えばNew RelicからAWS X-Rayに監視バックエンドを変更しようとした際、OpenTelemetryを使用していればアプリケーションのコネクタ部分だけ変えればすぐにメトリクスの送信先を変えられるといった感じらしいです。<p>今回はシングルバイナリでサクッと建てられる<a href=https://www.jaegertracing.io/>Jaeger</a>を使います。<pre><code class="language-bat hljs language-dos"><span class=hljs-built_in>setlocal</span>
+
+<span class=hljs-built_in>set</span> BASE_DIR=%~dp0
+
+<span class=hljs-built_in>set</span> SPAN_STORAGE_TYPE=badger
+<span class=hljs-built_in>set</span> BADGER_EPHEMERAL=false
+<span class=hljs-built_in>set</span> BADGER_DIRECTORY_VALUE=C:\<span class=hljs-built_in>path</span>\to\.jaeger\data
+<span class=hljs-built_in>set</span> BADGER_DIRECTORY_KEY=C:\<span class=hljs-built_in>path</span>\to\.jaeger\key
+
+<span class=hljs-built_in>start</span> http://localhost:<span class=hljs-number>16686</span> 
+<span class=hljs-keyword>call</span> <span class=hljs-variable>%BASE_DIR%</span>jaeger-all-<span class=hljs-keyword>in</span>-one.exe
+
+<span class=hljs-built_in>endlocal</span>
+</code></pre><p>みたいなバッチを作っておくとサクッと立ち上げられるので便利です。<h2>tracingの初期化</h2><p>今回はトレーシングライブラリとして<a href=https://github.com/tokio-rs/tracing>tokio-rs/tracing</a>を使用します。<p>tracingのレイヤーとしてOpenTelemetryのテレメトリを送信するControllerを差し込みます。<p>tracing自体はtokioには依存せず使用できますが、テレメトリの送信にgRPCを使用しており、gRPCがtonicを使用しているため自動的にtokioに依存することになります。 が、そこそこの規模のアプリケーションを開発する場合ほぼtokioを使うことになると思うので特に気にしなくても良いと思います。<pre><code class="language-rust hljs"><span class=hljs-keyword>use</span> opentelemetry::sdk::metrics::controllers::BasicController;
+<span class=hljs-keyword>use</span> opentelemetry_otlp::WithExportConfig;
+
+<span class="hljs-title function_ invoke__">pub</span>(<span class=hljs-keyword>crate</span>) <span class=hljs-keyword>struct</span> <span class="hljs-title class_">OtelInitGuard</span>();
+
+<span class=hljs-keyword>impl</span> <span class="hljs-title class_">Drop</span> <span class=hljs-keyword>for</span> <span class="hljs-title class_">OtelInitGuard</span> {
+    <span class=hljs-keyword>fn</span> <span class="hljs-title function_">drop</span>(&<span class=hljs-keyword>mut</span> <span class=hljs-keyword>self</span>) {
+        opentelemetry::global::<span class="hljs-title function_ invoke__">shutdown_tracer_provider</span>();
+    }
+}
+
+<span class=hljs-comment>// https://github.com/open-telemetry/opentelemetry-rust/blob/d4b9befea04bcc7fc19319a6ebf5b5070131c486/examples/basic-otlp/src/main.rs#L35-L52</span>
+<span class=hljs-keyword>fn</span> <span class="hljs-title function_">build_metrics_controller</span>() <span class=hljs-punctuation>-></span> BasicController {
+    <span class=hljs-keyword>use</span> opentelemetry::sdk::export::metrics::aggregation::cumulative_temporality_selector;
+    <span class=hljs-keyword>use</span> opentelemetry::sdk::metrics::selectors::simple::histogram;
+
+    opentelemetry_otlp::<span class="hljs-title function_ invoke__">new_pipeline</span>()
+        .<span class="hljs-title function_ invoke__">metrics</span>(
+            <span class="hljs-title function_ invoke__">histogram</span>(<span class=hljs-type>Vec</span>::<span class="hljs-title function_ invoke__">new</span>()),
+            <span class="hljs-title function_ invoke__">cumulative_temporality_selector</span>(),
+            opentelemetry::runtime::Tokio,
+        )
+        .<span class="hljs-title function_ invoke__">with_exporter</span>(
+            opentelemetry_otlp::<span class="hljs-title function_ invoke__">new_exporter</span>()
+                .<span class="hljs-title function_ invoke__">tonic</span>()
+                .<span class="hljs-title function_ invoke__">with_endpoint</span>(<span class=hljs-string>"http://localhost:4317"</span>),
+        )
+        .<span class="hljs-title function_ invoke__">build</span>()
+        .<span class="hljs-title function_ invoke__">expect</span>(<span class=hljs-string>"Failed to build metrics controller"</span>)
+}
+
+<span class="hljs-title function_ invoke__">pub</span>(<span class=hljs-keyword>crate</span>) <span class=hljs-keyword>fn</span> <span class="hljs-title function_">init_tracing</span>(service: &<span class=hljs-symbol>'static</span> <span class=hljs-type>str</span>, version: &<span class=hljs-symbol>'static</span> <span class=hljs-type>str</span>) <span class=hljs-punctuation>-></span> OtelInitGuard {
+    <span class=hljs-keyword>use</span> opentelemetry::sdk::trace::{RandomIdGenerator, Sampler};
+
+    <span class=hljs-comment>// Configure otel exporter.</span>
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>tracer</span> = opentelemetry_otlp::<span class="hljs-title function_ invoke__">new_pipeline</span>()
+        .<span class="hljs-title function_ invoke__">tracing</span>()
+        .<span class="hljs-title function_ invoke__">with_exporter</span>(
+            opentelemetry_otlp::<span class="hljs-title function_ invoke__">new_exporter</span>()
+                .<span class="hljs-title function_ invoke__">tonic</span>()
+                .<span class="hljs-title function_ invoke__">with_endpoint</span>(<span class=hljs-string>"http://localhost:4317"</span>),
+        )
+        .<span class="hljs-title function_ invoke__">with_trace_config</span>(
+            opentelemetry::sdk::trace::<span class="hljs-title function_ invoke__">config</span>()
+                .<span class="hljs-title function_ invoke__">with_sampler</span>(Sampler::AlwaysOn)
+                .<span class="hljs-title function_ invoke__">with_id_generator</span>(RandomIdGenerator::<span class="hljs-title function_ invoke__">default</span>())
+                .<span class="hljs-title function_ invoke__">with_resource</span>(opentelemetry::sdk::Resource::<span class="hljs-title function_ invoke__">new</span>(<span class=hljs-built_in>vec!</span>[
+                    opentelemetry::KeyValue::<span class="hljs-title function_ invoke__">new</span>(<span class=hljs-string>"service.name"</span>, service),
+                    opentelemetry::KeyValue::<span class="hljs-title function_ invoke__">new</span>(<span class=hljs-string>"service.version"</span>, version),
+                ])),
+        )
+        .<span class="hljs-title function_ invoke__">install_batch</span>(opentelemetry::runtime::Tokio)
+        <span class=hljs-comment>// .install_simple()</span>
+        .<span class="hljs-title function_ invoke__">expect</span>(<span class=hljs-string>"Not running in tokio runtime"</span>);
+
+    <span class=hljs-comment>// Compatible layer with tracing.</span>
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>otel_trace_layer</span> = tracing_opentelemetry::<span class="hljs-title function_ invoke__">layer</span>().<span class="hljs-title function_ invoke__">with_tracer</span>(tracer);
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>otel_metrics_layer</span> = tracing_opentelemetry::MetricsLayer::<span class="hljs-title function_ invoke__">new</span>(<span class="hljs-title function_ invoke__">build_metrics_controller</span>());
+
+    <span class=hljs-keyword>use</span> tracing_subscriber::layer::SubscriberExt;
+    <span class=hljs-keyword>use</span> tracing_subscriber::util::SubscriberInitExt;
+
+    tracing_subscriber::Registry::<span class="hljs-title function_ invoke__">default</span>()
+        .<span class="hljs-title function_ invoke__">with</span>(tracing_subscriber::fmt::Layer::<span class="hljs-title function_ invoke__">new</span>())
+        .<span class="hljs-title function_ invoke__">with</span>(otel_trace_layer)
+        .<span class="hljs-title function_ invoke__">with</span>(otel_metrics_layer)
+        .<span class="hljs-title function_ invoke__">with</span>(tracing_subscriber::filter::LevelFilter::INFO)
+        .<span class="hljs-title function_ invoke__">init</span>();
+
+    <span class="hljs-title function_ invoke__">OtelInitGuard</span>()
+}
+</code></pre><h2>アプリケーションコード</h2><p>起動時にOpenTelemetryの初期化さえしてしまえば、あとは普通にtracingを使うだけです。<p>メソッドに<code>#[instrument]</code>を貼れば自動的にSpanを作ってコンテキストを埋め込んでくれるので便利です。<pre><code class="language-rust hljs"><span class=hljs-keyword>mod</span> otl;
+
+<span class=hljs-keyword>use</span> crate::otl::init_tracing;
+<span class=hljs-keyword>use</span> tracing::{error, info, instrument};
+
+<span class=hljs-meta>#[instrument]</span>
+<span class=hljs-keyword>async</span> <span class=hljs-keyword>fn</span> <span class="hljs-title function_">start</span>(x: <span class=hljs-type>i32</span>, y: <span class=hljs-type>i32</span>) <span class=hljs-punctuation>-></span> <span class=hljs-type>Option</span>&lt;<span class=hljs-type>i32</span>> {
+    <span class="hljs-title function_ invoke__">add</span>(<span class="hljs-title function_ invoke__">multiply</span>(x, y).<span class=hljs-keyword>await</span>, <span class="hljs-title function_ invoke__">multiply</span>(x, y).<span class=hljs-keyword>await</span>).<span class=hljs-keyword>await</span>
+}
+
+<span class=hljs-meta>#[instrument]</span>
+<span class=hljs-keyword>async</span> <span class=hljs-keyword>fn</span> <span class="hljs-title function_">add</span>(x: <span class=hljs-type>i32</span>, y: <span class=hljs-type>i32</span>) <span class=hljs-punctuation>-></span> <span class=hljs-type>Option</span>&lt;<span class=hljs-type>i32</span>> {
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>ans</span> = x + y;
+
+    <span class=hljs-keyword>if</span> ans &lt;= <span class=hljs-number>10</span> {
+        info!(
+            ans = ans,
+            <span class=hljs-string>"特に出すべきログがないからとりあえず適当なメッセージを出しています"</span>
+        );
+        <span class="hljs-title function_ invoke__">Some</span>(ans)
+    } <span class=hljs-keyword>else</span> {
+        error!(ans = ans, <span class=hljs-string>"something went wrong"</span>);
+        <span class=hljs-literal>None</span>
+    }
+}
+
+<span class=hljs-meta>#[instrument]</span>
+<span class=hljs-keyword>async</span> <span class=hljs-keyword>fn</span> <span class="hljs-title function_">multiply</span>(x: <span class=hljs-type>i32</span>, y: <span class=hljs-type>i32</span>) <span class=hljs-punctuation>-></span> <span class=hljs-type>i32</span> {
+    x * y
+}
+
+<span class=hljs-meta>#[tokio::main]</span>
+<span class=hljs-keyword>async</span> <span class=hljs-keyword>fn</span> <span class="hljs-title function_">main</span>() {
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>service</span> = <span class=hljs-built_in>env!</span>(<span class=hljs-string>"CARGO_PKG_NAME"</span>);
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>version</span> = <span class=hljs-built_in>env!</span>(<span class=hljs-string>"CARGO_PKG_VERSION"</span>);
+
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>_guard</span> = <span class="hljs-title function_ invoke__">init_tracing</span>(service, version);
+
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>value</span> = <span class="hljs-title function_ invoke__">start</span>(<span class=hljs-number>1</span>, <span class=hljs-number>2</span>).<span class=hljs-keyword>await</span>;
+    <span class=hljs-built_in>println!</span>(<span class=hljs-string>"{:?}"</span>, value);
+
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>value</span> = <span class="hljs-title function_ invoke__">start</span>(<span class=hljs-number>10</span>, <span class=hljs-number>22</span>).<span class=hljs-keyword>await</span>;
+    <span class=hljs-built_in>println!</span>(<span class=hljs-string>"{:?}"</span>, value);
+}
+</code></pre><p><img alt src=/img/2023/09-08-rust-with-otlp/jaeger.png><p><a href=https://github.com/jyuch/tracing_otlp>jyuch/tracing_otlp</a></div></article><hr><nav class=post-navigation><ul><li>← Previous: <a href=/posts/2023/08-16-domain-transfer-google-domain-to-cloudflare/ rel=prev>ドメインをGoogle DomainからCloudflareに移管したお話</a><li><strong>Next: <a href=/posts/2024/04-01-dns-forwarder-using-hickory-dns/ rel=next>RustでもHickory DNSを使ってDNS Forwarderを実装したい</a> →</strong></ul></nav></main><footer><div><a href=/feed.xml> <svg viewbox="0 0 16 16" height=16 width=16 xmlns=http://www.w3.org/2000/svg><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"></path><path d="M5.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-3-8.5a1 1 0 0 1 1-1c5.523 0 10 4.477 10 10a1 1 0 1 1-2 0 8 8 0 0 0-8-8 1 1 0 0 1-1-1zm0 4a1 1 0 0 1 1-1 6 6 0 0 1 6 6 1 1 0 1 1-2 0 4 4 0 0 0-4-4 1 1 0 0 1-1-1z"></path></svg> </a></div></footer>
