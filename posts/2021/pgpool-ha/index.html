@@ -1,0 +1,122 @@
+<!doctype html><html lang=ja><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0" name=viewport><title>Pgpool-IIを使用した高可用性構成を試してみたい - レンコン畑でつかまえて</title><meta content=Pgpool-IIを使用して複数のクラスタを制御し、プライマリへの自動昇格が行えるかを確認します name=description><link href=/pagefind/pagefind-ui.css rel=stylesheet><link href=/styles.css rel=stylesheet><link href=/feed.xml rel=alternate title=レンコン畑でつかまえて type=application/atom+xml><link href=/feed.json rel=alternate title=レンコン畑でつかまえて type=application/json><script src="https://www.googletagmanager.com/gtag/js?id=G-1F9LYQGGMB" async></script><script>window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-1F9LYQGGMB');</script><script src=/pagefind/pagefind-ui.js></script><script>window.addEventListener('DOMContentLoaded',()=>{new PagefindUI({"element":"#search","showImages":false,"excerptLength":0,"showEmptyFilters":true,"showSubResults":false,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"});});</script><body><nav class=navbar><a class=navbar-home href=/> <strong>レンコン畑でつかまえて</strong> </a><ul class=navbar-links><li><a href=/> Home </a><li><a href=/posts/> Archive </a><li><a href=https://about.jyuch.dev/> About Me </a></ul><div class=navbar-search><div id=search></div></div></nav><main class=body-post><article class=post data-pagefind-body><div class=post-header><h1 class=post-title>Pgpool-IIを使用した高可用性構成を試してみたい</h1><nav class=post-tags><a class=tag href=/tags/postgres/>postgres</a></nav><time datetime="2021-11-08 00:00:00" class=post-date> November 8th, 2021 </time></div><div class=post-body><h2>はじめに</h2><p>Postgres標準のストリーミングレプリケーションだけでは、スタンバイは自動的にプライマリに昇格せずオペレータの介在を必要とします。<p>ここでは、Pgpool-IIを使用して複数のクラスタを制御し、プライマリへの自動昇格を行わせます。<h2>環境のセットアップ</h2><p>ゼロから構築するのは割とつらいので、<code>pgpool_setup</code>を使用してテスト環境を構築します。<p>このツールはテスト環境を手早くでっち上げるためのツールなので、本番には使えません。<p>ローカルからパスワード無しでsshログインが出来る必要があるので、鍵を生成してそのまま自分の公開鍵リストに突っ込みます。<pre><code class="language-sh hljs language-bash">ssh-keygen -t ed25519 -C localhost
+<span class=hljs-built_in>cat</span> ~/.ssh/id_ed25519.pub >> ~/.ssh/authorized_keys
+</code></pre><p>PostgresやPgpool-IIのインストール先がデフォルトと異なるので、それぞれのインストール先を環境変数に設定していきます。<pre><code class="language-sh hljs language-bash"><span class=hljs-built_in>export</span> PGPOOL_INSTALL_DIR=/home/jyuch/local/pgpool
+<span class=hljs-built_in>export</span> PGBIN=/home/jyuch/local/pg/11/bin 
+<span class=hljs-built_in>export</span> PGLIB=/home/jyuch/local/pg/11/lib
+</code></pre><p>データベースクラスタや設定ファイル群を格納するディレクトリを作成し、その中にテスト環境をセットアップします。<pre><code class="language-sh hljs language-bash"><span class=hljs-built_in>mkdir</span> ~/pgdata/pgpooltest && <span class=hljs-built_in>cd</span> ~/pgdata/pgpooltest
+pgpool_setup -s
+</code></pre><p>以下のコマンドでシステム全体が起動します。<pre><code class="language-sh hljs language-bash">./startall
+</code></pre><p>起動すると（変更していなければ）Pgpool-IIは<code>11000</code>ポートで待ち受けます。 任意のデータベースに対して<code>show pool_nodes</code>疑似SQLを投入すると参加しているクラスタの状況が見られます。 <code>pgpool_setup</code>は<code>test</code>データベースを自動的に作成するので、今回はこれを使用します。<pre><code class="language-sh hljs language-bash">$ psql -p 11000 -c <span class=hljs-string>"show pool_nodes"</span> <span class=hljs-built_in>test</span>
+-[ RECORD 1 ]----------+--------------------
+node_id                | 0
+hostname               | /tmp
+port                   | 11002
+status                 | up
+lb_weight              | 0.500000
+role                   | primary
+select_cnt             | 0
+load_balance_node      | <span class=hljs-literal>false</span>
+replication_delay      | 0
+replication_state      |  
+replication_sync_state |  
+last_status_change     | 2021-08-11 11:08:24
+-[ RECORD 2 ]----------+--------------------
+node_id                | 1
+hostname               | /tmp
+port                   | 11003
+status                 | up
+lb_weight              | 0.500000
+role                   | standby
+select_cnt             | 0
+load_balance_node      | <span class=hljs-literal>true</span>
+replication_delay      | 0
+replication_state      | streaming
+replication_sync_state | async
+last_status_change     | 2021-08-11 11:08:24
+</code></pre><h2>レプリケーション</h2><p>ここでは、テストデータとして<code>pgbench</code>のデータを流し込みます。<pre><code class="language-sh hljs language-bash">$ pgbench -i -p 11000 <span class=hljs-built_in>test</span>
+</code></pre><p>ベンチマークを走らせて、結果をそれぞれのDBに問い合わせると同じ答えが返ってくるので、問題なさそうです。<pre><code class="language-sh hljs language-bash">$ pgbench -p 11000 -T 10 <span class=hljs-built_in>test</span>
+psql -p 11002 -c <span class=hljs-string>"SELECT sum(abalance) FROM pgbench_accounts"</span> <span class=hljs-built_in>test</span>
+  <span class=hljs-built_in>sum</span>  
+-------
+ 92663
+(1 row)
+
+psql -p 11003 -c <span class=hljs-string>"SELECT sum(abalance) FROM pgbench_accounts"</span> <span class=hljs-built_in>test</span>
+  <span class=hljs-built_in>sum</span>  
+-------
+ 92663
+(1 row)
+</code></pre><h2>フェイルオーバー</h2><p>プライマリを停止させ、スタンバイが正常にプライマリに昇格するか確認します。<p>プライマリを疑似的に異常終了させます。<pre><code class="language-sh hljs language-bash">pg_ctl -m immediate -D data0 stop
+</code></pre><p>すると、スタンバイが自動でプライマリに昇格します。<pre><code class="language-sh hljs language-bash">psql -x -p 11000 -c <span class=hljs-string>"show pool_nodes"</span> <span class=hljs-built_in>test</span>
+-[ RECORD 1 ]----------+--------------------
+node_id                | 0
+hostname               | /tmp
+port                   | 11002
+status                 | down
+lb_weight              | 0.500000
+role                   | standby
+select_cnt             | 690
+load_balance_node      | <span class=hljs-literal>false</span>
+replication_delay      | 0
+replication_state      |  
+replication_sync_state |  
+last_status_change     | 2021-08-11 11:38:28
+-[ RECORD 2 ]----------+--------------------
+node_id                | 1
+hostname               | /tmp
+port                   | 11003
+status                 | up
+lb_weight              | 0.500000
+role                   | primary
+select_cnt             | 0
+load_balance_node      | <span class=hljs-literal>true</span>
+replication_delay      | 0
+replication_state      |  
+replication_sync_state |  
+last_status_change     | 2021-08-11 11:38:28
+</code></pre><p>この状態でも<code>pgbench</code>は完走します。<pre><code class="language-sh hljs language-bash">$ pgbench -p 11000 -T 10 <span class=hljs-built_in>test</span>                                       
+starting vacuum...end.
+transaction <span class=hljs-built_in>type</span>: &lt;<span class=hljs-built_in>builtin</span>: TPC-B (<span class=hljs-built_in>sort</span> of)>
+scaling <span class=hljs-built_in>factor</span>: 1
+query mode: simple
+number of clients: 1
+number of threads: 1
+duration: 10 s
+number of transactions actually processed: 1195
+latency average = 8.375 ms
+tps = 119.403809 (including connections establishing)
+tps = 119.429839 (excluding connections establishing)
+</code></pre><h2>オンラインリカバリ</h2><p>ノードを復帰させるコマンドを投入します。<p><code>pg_ctl</code>を使用して手動で再起動するとわけわかんない事になるのでやってはいけません。（１敗）<pre><code class="language-sh hljs language-bash">$ pcp_recovery_node -p 11001 -n 0
+Password:  <span class=hljs-comment># ← 詳しい話は分からないが、とりあえず pgpool_setup を実行したユーザ名と同じであれば大丈夫っぽい</span>
+pcp_recovery_node -- Command Successful
+</code></pre><pre><code class="language-sh hljs language-bash">$ psql -x  -p 11000 -c <span class=hljs-string>"show pool_nodes"</span> <span class=hljs-built_in>test</span>
+-[ RECORD 1 ]----------+--------------------
+node_id                | 0
+hostname               | /tmp
+port                   | 11002
+status                 | up
+lb_weight              | 0.500000
+role                   | standby
+select_cnt             | 0
+load_balance_node      | <span class=hljs-literal>false</span>
+replication_delay      | 0
+replication_state      | streaming
+replication_sync_state | async
+last_status_change     | 2021-08-11 12:19:20
+-[ RECORD 2 ]----------+--------------------
+node_id                | 1
+hostname               | /tmp
+port                   | 11003
+status                 | up
+lb_weight              | 0.500000
+role                   | primary
+select_cnt             | 0
+load_balance_node      | <span class=hljs-literal>true</span>
+replication_delay      | 0
+replication_state      | 
+replication_sync_state | 
+last_status_change     | 2021-08-11 12:18:27
+</code></pre><p>すると、何となくノード0が復帰します。<p>おわり</div></article><hr><nav class=post-navigation><ul><li>← Previous: <a href=/posts/2021/pg-streaming-replication/ rel=prev>PostgreSQLでもストリーミングレプリケーションを試してみたい</a><li><strong>Next: <a href=/posts/2021/pg-re-create-cluster-on-windows/ rel=next>WindowsでもPostgreSQLのデータディレクトリを移動したい</a> →</strong></ul></nav></main><footer><div><a href=/feed.xml> <svg viewbox="0 0 16 16" height=16 width=16 xmlns=http://www.w3.org/2000/svg><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"></path><path d="M5.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-3-8.5a1 1 0 0 1 1-1c5.523 0 10 4.477 10 10a1 1 0 1 1-2 0 8 8 0 0 0-8-8 1 1 0 0 1-1-1zm0 4a1 1 0 0 1 1-1 6 6 0 0 1 6 6 1 1 0 1 1-2 0 4 4 0 0 0-4-4 1 1 0 0 1-1-1z"></path></svg> </a></div></footer>

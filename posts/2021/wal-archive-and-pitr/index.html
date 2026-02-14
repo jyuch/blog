@@ -1,0 +1,182 @@
+<!doctype html><html lang=ja><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0" name=viewport><title>PostgreSQLでもWALアーカイブを使用してPITRしたい - レンコン畑でつかまえて</title><meta content=ベースバックアップとWALアーカイブを組み合わせ、クラッシュ直前の状態までクラスタを復旧させる方法を確認します name=description><link href=/pagefind/pagefind-ui.css rel=stylesheet><link href=/styles.css rel=stylesheet><link href=/feed.xml rel=alternate title=レンコン畑でつかまえて type=application/atom+xml><link href=/feed.json rel=alternate title=レンコン畑でつかまえて type=application/json><script src="https://www.googletagmanager.com/gtag/js?id=G-1F9LYQGGMB" async></script><script>window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-1F9LYQGGMB');</script><script src=/pagefind/pagefind-ui.js></script><script>window.addEventListener('DOMContentLoaded',()=>{new PagefindUI({"element":"#search","showImages":false,"excerptLength":0,"showEmptyFilters":true,"showSubResults":false,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"});});</script><body><nav class=navbar><a class=navbar-home href=/> <strong>レンコン畑でつかまえて</strong> </a><ul class=navbar-links><li><a href=/> Home </a><li><a href=/posts/> Archive </a><li><a href=https://about.jyuch.dev/> About Me </a></ul><div class=navbar-search><div id=search></div></div></nav><main class=body-post><article class=post data-pagefind-body><div class=post-header><h1 class=post-title>PostgreSQLでもWALアーカイブを使用してPITRしたい</h1><nav class=post-tags><a class=tag href=/tags/postgres/>postgres</a></nav><time datetime="2021-11-08 00:00:00" class=post-date> November 8th, 2021 </time></div><div class=post-body><h2>はじめに</h2><p>ここではベースバックアップとWALアーカイブを組み合わせ、クラッシュ直前の状態までクラスタを復旧させる方法を確認します。<p>また、リカバリオプションを確認し、任意の時点までのリカバリを行えることを確認します。<h2>諸元</h2><p>ここでは、以下のディレクトリにデータベースクラスタとWALアーカイブを保存します。<table><thead><tr><th style=text-align:left>役割<th style=text-align:left>パス<tbody><tr><td style=text-align:left>データベースクラスタ（プライマリ）<td style=text-align:left>/home/jyuch/pgdata/11/primary<tr><td style=text-align:left>データベースクラスタ（バックアップ）<td style=text-align:left>/home/jyuch/pgdata/11/standby<tr><td style=text-align:left>WALアーカイブ<td style=text-align:left>/home/jyuch/pgdata/11/walarch</table><h2>データベースクラスタの初期化</h2><p>それとなくデータベースクラスタを初期化します。<pre><code class="language-sh hljs language-bash">initdb --no-locale --encoding=UTF-8 -D /home/jyuch/pgdata/11/primary
+</code></pre><p>アーカイブ先を作成します。<pre><code class="language-sh hljs language-bash"><span class=hljs-built_in>mkdir</span> -p /home/jyuch/pgdata/11/walarch
+</code></pre><p><code>postgres.conf</code>を編集して、WALをアーカイブ先にアーカイブするように構成します。 また、1分で強制的にWALファイルをローテートするようにします。（本番用途では短すぎる値なので、もっと伸ばした方が良いです。）<p>また、確実にチェックポイント前にデータベースが吹っ飛ぶように<code>checkpoint_timeout</code>を極端な値にします。（テスト用の構成なので、本番では絶対にマネしないでね）<pre><code class="language-sh hljs language-bash">archive_mode = on
+archive_command = <span class=hljs-string>'test ! -f /home/jyuch/pgdata/11/walarch/%f && cp %p /home/jyuch/pgdata/11/walarch/%f'</span>
+archive_timeout = 1min
+checkpoint_timeout = 1d
+max_wal_size = 4GB
+min_wal_size = 1GB
+</code></pre><pre><code class="language-sh hljs language-bash">pg_ctl -D /home/jyuch/pgdata/11/primary start
+</code></pre><p>データベースを作成します。<pre><code class="language-sh hljs language-bash">$ psql postgres
+psql (11.12)
+Type <span class=hljs-string>"help"</span> <span class=hljs-keyword>for</span> <span class=hljs-built_in>help</span>.
+
+postgres=# CREATE DATABASE <span class=hljs-built_in>test</span>;
+CREATE DATABASE
+postgres=# \q
+
+$ psql <span class=hljs-built_in>test</span>    
+psql (11.12)
+Type <span class=hljs-string>"help"</span> <span class=hljs-keyword>for</span> <span class=hljs-built_in>help</span>.
+
+<span class=hljs-built_in>test</span>=# CREATE TABLE hoge (msg varchar(100));
+CREATE TABLE
+<span class=hljs-built_in>test</span>=# INSERT INTO hoge VALUES (<span class=hljs-string>'database initialized'</span>);
+INSERT 0 1
+<span class=hljs-built_in>test</span>=# \q
+</code></pre><p>一度、強制的にチェックポイントを走らせます。<p>これで、この時点の変更はすべてディスクに書き出された事が保証されます。<pre><code class="language-sh hljs language-bash">psql -c <span class=hljs-string>"CHECKPOINT"</span> postgres
+</code></pre><p><code>pg_basebackup</code>でベースバックアップを取得します。<pre><code class="language-sh hljs language-bash">pg_basebackup -h localhost -D /home/jyuch/pgdata/11/standby -X stream --progress
+</code></pre><h2>データベースクラスタの破壊</h2><p>新しいレコードを挿入したら、WALがローテートされるのを待ってからクラスタを南無三します。<pre><code class="language-sh hljs language-bash">psql -c <span class=hljs-string>"INSERT INTO hoge VALUES ('before crash')"</span> <span class=hljs-built_in>test</span>; \
+  <span class=hljs-built_in>sleep</span> 70; \
+  pg_ctl stop -m immediate -D /home/jyuch/pgdata/11/primary
+</code></pre><h2>リカバリ</h2><p>ベースバックアップを採ったディレクトリに<code>recovery.conf</code>を追加し、WALアーカイブからのコピーコマンドを追加します。<pre><code class="language-sh hljs language-bash">restore_command = <span class=hljs-string>'cp /home/jyuch/pgdata/11/walarch/%f %p'</span>
+</code></pre><p>追加したらリカバリ側を起動させます。<pre><code class="language-sh hljs language-bash">$ pg_ctl -D /home/jyuch/pgdata/11/standby start
+waiting <span class=hljs-keyword>for</span> server to start....2021-08-12 10:23:20.654 JST [16316] LOG:  listening on IPv4 address <span class=hljs-string>"127.0.0.1"</span>, port 5432
+2021-08-12 10:23:20.681 JST [16316] LOG:  listening on Unix socket <span class=hljs-string>"/tmp/.s.PGSQL.5432"</span>
+2021-08-12 10:23:20.734 JST [16317] LOG:  database system was interrupted; last known up at 2021-08-12 10:02:44 JST
+2021-08-12 10:23:20.837 JST [16317] LOG:  starting archive recovery
+2021-08-12 10:23:20.851 JST [16317] LOG:  restored <span class=hljs-built_in>log</span> file <span class=hljs-string>"000000010000000000000004"</span> from archive
+2021-08-12 10:23:21.076 JST [16317] LOG:  redo starts at 0/4000028
+2021-08-12 10:23:21.085 JST [16317] LOG:  consistent recovery state reached at 0/40000F8
+2021-08-12 10:23:21.085 JST [16316] LOG:  database system is ready to accept <span class=hljs-built_in>read</span> only connections
+2021-08-12 10:23:21.099 JST [16317] LOG:  restored <span class=hljs-built_in>log</span> file <span class=hljs-string>"000000010000000000000005"</span> from archive
+ <span class=hljs-keyword>done</span>
+server started
+<span class=hljs-built_in>cp</span>: cannot <span class=hljs-built_in>stat</span> <span class=hljs-string>'/home/jyuch/pgdata/11/walarch/000000010000000000000006'</span>: No such file or directory
+2021-08-12 10:23:21.264 JST [16317] LOG:  redo <span class=hljs-keyword>done</span> at 0/5000170
+2021-08-12 10:23:21.264 JST [16317] LOG:  last completed transaction was at <span class=hljs-built_in>log</span> <span class=hljs-keyword>time</span> 2021-08-12 10:06:19.604226+09
+2021-08-12 10:23:21.294 JST [16317] LOG:  restored <span class=hljs-built_in>log</span> file <span class=hljs-string>"000000010000000000000005"</span> from archive
+<span class=hljs-built_in>cp</span>: cannot <span class=hljs-built_in>stat</span> <span class=hljs-string>'/home/jyuch/pgdata/11/walarch/00000002.history'</span>: No such file or directory
+2021-08-12 10:23:21.445 JST [16317] LOG:  selected new timeline ID: 2
+2021-08-12 10:23:21.651 JST [16317] LOG:  archive recovery complete
+<span class=hljs-built_in>cp</span>: cannot <span class=hljs-built_in>stat</span> <span class=hljs-string>'/home/jyuch/pgdata/11/walarch/00000001.history'</span>: No such file or directory
+2021-08-12 10:23:21.905 JST [16316] LOG:  database system is ready to accept connections
+</code></pre><p>WALアーカイブからリカバリが走り、ベースバックアップ後に追加したレコードも正常にリストア出来ていることが確認出来ます。<pre><code class="language-sh hljs language-bash">$ psql -c <span class=hljs-string>"SELECT * FROM hoge"</span> <span class=hljs-built_in>test</span>
+         msg          
+----------------------
+ database initialized
+ before crash
+(2 rows)
+</code></pre><h2>PITR</h2><p>次に、WALアーカイブを利用したPITRを試してみます。<p>先ほどと同様にクラスタを作成・初期化します。<pre><code class="language-sh hljs language-bash">initdb --no-locale --encoding=UTF-8 -D /home/jyuch/pgdata/11/primary
+<span class=hljs-built_in>mkdir</span> -p /home/jyuch/pgdata/11/walarch
+</code></pre><pre><code class="language-sh hljs language-bash">archive_mode = on
+archive_command = <span class=hljs-string>'test ! -f /home/jyuch/pgdata/11/walarch/%f && cp %p /home/jyuch/pgdata/11/walarch/%f'</span>
+archive_timeout = 1min
+checkpoint_timeout = 1d
+max_wal_size = 4GB
+min_wal_size = 1GB
+</code></pre><pre><code class="language-sh hljs language-bash">pg_ctl -D /home/jyuch/pgdata/11/primary start
+</code></pre><p>データベースを作成します。<pre><code class="language-sh hljs language-bash">$ psql postgres
+psql (11.12)
+Type <span class=hljs-string>"help"</span> <span class=hljs-keyword>for</span> <span class=hljs-built_in>help</span>.
+
+postgres=# CREATE DATABASE <span class=hljs-built_in>test</span>;
+CREATE DATABASE
+postgres=# \q
+
+$ psql <span class=hljs-built_in>test</span>    
+psql (11.12)
+Type <span class=hljs-string>"help"</span> <span class=hljs-keyword>for</span> <span class=hljs-built_in>help</span>.
+
+<span class=hljs-built_in>test</span>=# CREATE TABLE foo (i timestamp, msg varchar(50));
+CREATE TABLE
+<span class=hljs-built_in>test</span>=# \q
+</code></pre><p>以下のスクリプトを実行し、データベースにデータを投入します。<pre><code class="language-sh hljs language-bash"><span class=hljs-meta>#!/bin/sh</span>
+
+<span class=hljs-keyword>for</span> i <span class=hljs-keyword>in</span> `<span class=hljs-built_in>seq</span> 5`
+<span class=hljs-keyword>do</span>
+  <span class=hljs-built_in>echo</span> <span class=hljs-string>"before basebackup `date`"</span>
+  psql -c <span class=hljs-string>"INSERT INTO foo VALUES (now(), 'before pg_basebackup <span class=hljs-variable>$i</span>')"</span> <span class=hljs-built_in>test</span>
+  <span class=hljs-built_in>sleep</span> 60
+<span class=hljs-keyword>done</span>
+
+<span class=hljs-built_in>echo</span> <span class=hljs-string>'execute checkpoint'</span>
+psql -c <span class=hljs-string>"CHECKPOINT"</span> postgres
+
+<span class=hljs-built_in>echo</span> <span class=hljs-string>'execute pg_basebackup'</span>
+pg_basebackup -h localhost -D /home/jyuch/pgdata/11/standby -X stream --progress
+
+<span class=hljs-keyword>for</span> i <span class=hljs-keyword>in</span> `<span class=hljs-built_in>seq</span> 10`
+<span class=hljs-keyword>do</span>
+  <span class=hljs-built_in>echo</span> <span class=hljs-string>"after basebackup `date`"</span>
+  psql -c <span class=hljs-string>"INSERT INTO foo VALUES (now(), 'after pg_basebackup <span class=hljs-variable>$i</span>')"</span> <span class=hljs-built_in>test</span>
+  <span class=hljs-built_in>sleep</span> 60
+<span class=hljs-keyword>done</span>
+</code></pre><p>投入したデータを確認します。<pre><code class="language-sh hljs language-bash">psql -c <span class=hljs-string>"SELECT * FROM foo ORDER BY i DESC"</span> <span class=hljs-built_in>test</span>
+</code></pre><pre><code class="language-sh hljs language-bash">             i              |          msg           
+----------------------------+------------------------
+ 2021-08-12 12:13:00.403919 | after pg_basebackup 10
+ 2021-08-12 12:12:00.208846 | after pg_basebackup 9
+ 2021-08-12 12:10:59.991466 | after pg_basebackup 8
+ 2021-08-12 12:09:59.796172 | after pg_basebackup 7
+ 2021-08-12 12:08:59.556793 | after pg_basebackup 6
+ 2021-08-12 12:07:59.542937 | after pg_basebackup 5
+ 2021-08-12 12:06:59.533902 | after pg_basebackup 4
+ 2021-08-12 12:05:59.413026 | after pg_basebackup 3
+ 2021-08-12 12:04:59.395453 | after pg_basebackup 2
+ 2021-08-12 12:03:59.386102 | after pg_basebackup 1
+ 2021-08-12 12:02:57.576892 | before pg_basebackup 5
+ 2021-08-12 12:01:57.37541  | before pg_basebackup 4
+ 2021-08-12 12:00:57.161414 | before pg_basebackup 3
+ 2021-08-12 11:59:57.13221  | before pg_basebackup 2
+ 2021-08-12 11:58:57.119013 | before pg_basebackup 1
+(15 rows)
+</code></pre><p>プライマリのクラスタを停止させます。<pre><code class="language-sh hljs language-bash">pg_ctl -D /home/jyuch/pgdata/11/primary stop
+</code></pre><p>ここでは、12時8分30秒時点までリカバリするものとします。<p>スクリプト中で取得したベースバックアップに、<code>recovery.conf</code>を追加し、WALアーカイブからのコピーコマンドとPITRポイントを追加します。<pre><code class="language-sh hljs language-bash">restore_command = <span class=hljs-string>'cp /home/jyuch/pgdata/11/walarch/%f %p'</span>
+recovery_target_time  = <span class=hljs-string>'2021-08-12 12:08:30 JST'</span>
+</code></pre><p>追加したらリカバリ側を起動させます。<pre><code class="language-sh hljs language-bash">pg_ctl -D /home/jyuch/pgdata/11/standby start
+</code></pre><pre><code class="language-sh hljs language-bash">waiting <span class=hljs-keyword>for</span> server to start....2021-08-12 12:17:41.105 JST [19993] LOG:  listening on IPv4 address <span class=hljs-string>"127.0.0.1"</span>, port 5432
+2021-08-12 12:17:41.142 JST [19993] LOG:  listening on Unix socket <span class=hljs-string>"/tmp/.s.PGSQL.5432"</span>
+2021-08-12 12:17:41.179 JST [19994] LOG:  database system was interrupted; last known up at 2021-08-12 12:03:58 JST
+2021-08-12 12:17:41.270 JST [19994] LOG:  starting point-in-time recovery to 2021-08-12 12:08:30+09
+2021-08-12 12:17:41.284 JST [19994] LOG:  restored <span class=hljs-built_in>log</span> file <span class=hljs-string>"000000010000000000000008"</span> from archive
+2021-08-12 12:17:41.475 JST [19994] LOG:  redo starts at 0/8000028
+2021-08-12 12:17:41.484 JST [19994] LOG:  consistent recovery state reached at 0/80000F8
+2021-08-12 12:17:41.485 JST [19993] LOG:  database system is ready to accept <span class=hljs-built_in>read</span> only connections
+ <span class=hljs-keyword>done</span>
+server started
+2021-08-12 12:17:41.500 JST [19994] LOG:  restored <span class=hljs-built_in>log</span> file <span class=hljs-string>"000000010000000000000009"</span> from archive   
+2021-08-12 12:17:41.697 JST [19994] LOG:  restored <span class=hljs-built_in>log</span> file <span class=hljs-string>"00000001000000000000000A"</span> from archive
+2021-08-12 12:17:41.874 JST [19994] LOG:  restored <span class=hljs-built_in>log</span> file <span class=hljs-string>"00000001000000000000000B"</span> from archive
+2021-08-12 12:17:42.050 JST [19994] LOG:  restored <span class=hljs-built_in>log</span> file <span class=hljs-string>"00000001000000000000000C"</span> from archive
+2021-08-12 12:17:42.296 JST [19994] LOG:  restored <span class=hljs-built_in>log</span> file <span class=hljs-string>"00000001000000000000000D"</span> from archive
+2021-08-12 12:17:42.467 JST [19994] LOG:  restored <span class=hljs-built_in>log</span> file <span class=hljs-string>"00000001000000000000000E"</span> from archive
+2021-08-12 12:17:42.642 JST [19994] LOG:  recovery stopping before commit of transaction 580, <span class=hljs-keyword>time</span> 2021-08-12 12:08:59.557185+09
+2021-08-12 12:17:42.642 JST [19994] LOG:  recovery has paused
+2021-08-12 12:17:42.642 JST [19994] HINT:  Execute pg_wal_replay_resume() to <span class=hljs-built_in>continue</span>.
+</code></pre><p>問題無かったら<code>pg_wal_replay_resume()</code>を実行しろと言われるので、実行します。<pre><code class="language-sh hljs language-bash">$ psql postgres
+psql (11.12)
+Type <span class=hljs-string>"help"</span> <span class=hljs-keyword>for</span> <span class=hljs-built_in>help</span>.
+
+postgres=# <span class=hljs-keyword>select</span> pg_wal_replay_resume();
+ pg_wal_replay_resume 
+----------------------
+ 
+(1 row)
+
+postgres=# \q
+</code></pre><p>リカバリが終了したと言われます。<pre><code class="language-sh hljs language-bash">2021-08-12 12:20:58.839 JST [19994] LOG:  redo <span class=hljs-keyword>done</span> at 0/E000080
+2021-08-12 12:20:58.839 JST [19994] LOG:  last completed transaction was at <span class=hljs-built_in>log</span> <span class=hljs-keyword>time</span> 2021-08-12 12:07:59.543321+09
+<span class=hljs-built_in>cp</span>: cannot <span class=hljs-built_in>stat</span> <span class=hljs-string>'/home/jyuch/pgdata/11/walarch/00000002.history'</span>: No such file or directory
+2021-08-12 12:20:58.896 JST [19994] LOG:  selected new timeline ID: 2
+2021-08-12 12:20:59.145 JST [19994] LOG:  archive recovery complete
+<span class=hljs-built_in>cp</span>: cannot <span class=hljs-built_in>stat</span> <span class=hljs-string>'/home/jyuch/pgdata/11/walarch/00000001.history'</span>: No such file or directory
+2021-08-12 12:20:59.392 JST [19993] LOG:  database system is ready to accept connections
+</code></pre><p>データを確認すると、指定した時点までのデータがリストアされていることが確認出来ます。<pre><code class="language-sh hljs language-bash">psql -c <span class=hljs-string>"SELECT * FROM foo ORDER BY i DESC"</span> <span class=hljs-built_in>test</span>
+</code></pre><pre><code class="language-sh hljs language-bash">             i              |          msg           
+----------------------------+------------------------
+ 2021-08-12 12:07:59.542937 | after pg_basebackup 5
+ 2021-08-12 12:06:59.533902 | after pg_basebackup 4
+ 2021-08-12 12:05:59.413026 | after pg_basebackup 3
+ 2021-08-12 12:04:59.395453 | after pg_basebackup 2
+ 2021-08-12 12:03:59.386102 | after pg_basebackup 1
+ 2021-08-12 12:02:57.576892 | before pg_basebackup 5
+ 2021-08-12 12:01:57.37541  | before pg_basebackup 4
+ 2021-08-12 12:00:57.161414 | before pg_basebackup 3
+ 2021-08-12 11:59:57.13221  | before pg_basebackup 2
+ 2021-08-12 11:58:57.119013 | before pg_basebackup 1
+(10 rows)
+</code></pre><p>おわり</div></article><hr><nav class=post-navigation><ul><li>← Previous: <a href=/posts/2021/pg-re-create-cluster-on-windows/ rel=prev>WindowsでもPostgreSQLのデータディレクトリを移動したい</a><li><strong>Next: <a href=/posts/2021/build-pg-on-linux/ rel=next>PostgreSQLを野良ビルドしてローカルインストールしたい</a> →</strong></ul></nav></main><footer><div><a href=/feed.xml> <svg viewbox="0 0 16 16" height=16 width=16 xmlns=http://www.w3.org/2000/svg><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"></path><path d="M5.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-3-8.5a1 1 0 0 1 1-1c5.523 0 10 4.477 10 10a1 1 0 1 1-2 0 8 8 0 0 0-8-8 1 1 0 0 1-1-1zm0 4a1 1 0 0 1 1-1 6 6 0 0 1 6 6 1 1 0 1 1-2 0 4 4 0 0 0-4-4 1 1 0 0 1-1-1z"></path></svg> </a></div></footer>

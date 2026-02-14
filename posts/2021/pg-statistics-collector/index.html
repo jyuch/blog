@@ -1,0 +1,71 @@
+<!doctype html><html lang=ja><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0" name=viewport><title>PostgreSQLでも統計情報を確認したい - レンコン畑でつかまえて</title><meta content=PostgreSQLの統計情報を確認方法を解説しています name=description><link href=/pagefind/pagefind-ui.css rel=stylesheet><link href=/styles.css rel=stylesheet><link href=/feed.xml rel=alternate title=レンコン畑でつかまえて type=application/atom+xml><link href=/feed.json rel=alternate title=レンコン畑でつかまえて type=application/json><script src="https://www.googletagmanager.com/gtag/js?id=G-1F9LYQGGMB" async></script><script>window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-1F9LYQGGMB');</script><script src=/pagefind/pagefind-ui.js></script><script>window.addEventListener('DOMContentLoaded',()=>{new PagefindUI({"element":"#search","showImages":false,"excerptLength":0,"showEmptyFilters":true,"showSubResults":false,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"});});</script><body><nav class=navbar><a class=navbar-home href=/> <strong>レンコン畑でつかまえて</strong> </a><ul class=navbar-links><li><a href=/> Home </a><li><a href=/posts/> Archive </a><li><a href=https://about.jyuch.dev/> About Me </a></ul><div class=navbar-search><div id=search></div></div></nav><main class=body-post><article class=post data-pagefind-body><div class=post-header><h1 class=post-title>PostgreSQLでも統計情報を確認したい</h1><nav class=post-tags><a class=tag href=/tags/postgres/>postgres</a></nav><time datetime="2021-11-08 00:00:00" class=post-date> November 8th, 2021 </time></div><div class=post-body><h2>はじめに</h2><p>PostgreSQLは自動もしくは手動の解析（Analyze）でテーブルの統計情報を取得しています。 当該情報を確認すればテーブルがどの程度のタプルを有しているかや、どれだけ無効なタプルを有しているかの確認が出来ます。<p>というのが公式リファレンスに載っています。困ったら公式リファレンスを参照する　旧約聖書にも載っています。<p><a href=https://www.postgresql.jp/document/11/html/monitoring-stats.html>公式リファレンス</a><h2>統計ビューを参照する際の注意点</h2><p>統計ビューは<strong>リアルタイムには更新されません。</strong><p>統計ビューの内容はいくつかの要因によって更新までにある程度の遅延が発生します。 そのため、進行中のトランザクションによって変更されている行数などは統計ビューの各種情報には反映されません。<p>いくつかの要因と言葉を濁していますが、正直よく分かりません。 まぁ確かに更新が遅れているなぁ程度の認識です。<p>また、統計ビュー自体をトランザクション内で実行している場合においては、常に同じ値を返し続けます。 これは、トランザクション内で複数のビューで問い合わせを行った際にその時点での一貫した回答を行うためです。 そのため、最新の値を取得したい場合はトランザクションの外側でクエリを実行する必要があります。<p>集められた統計情報はシャットダウン中にデータディレクトリに特定のサブディレクトリに格納され、永続化されます。 しかし、クラッシュ等が発生し次回起動時にリカバリを要する場合は正しく保存されていない可能性があるため統計情報はクリアされます。<h2>テーブル統計情報</h2><p>テーブルの統計情報を確認するには、<code>pg_stat_all_tables</code>統計ビューを参照します。<pre><code class="language-sql hljs"><span class=hljs-keyword>SELECT</span> relid,                                                   <span class=hljs-comment>-- テーブルのOID</span>
+       schemaname,                                              <span class=hljs-comment>-- テーブルが存在するスキーマ名</span>
+       relname,                                                 <span class=hljs-comment>-- テーブルの名前</span>
+       seq_scan,                                                <span class=hljs-comment>-- テーブルがシーケンシャルスキャンされた回数</span>
+       seq_tup_read,                                            <span class=hljs-comment>-- シーケンシャルスキャンによって取り出された有効行の個数</span>
+       idx_scan,                                                <span class=hljs-comment>-- インデックススキャンの回数</span>
+       idx_tup_fetch,                                           <span class=hljs-comment>-- インデックススキャンによって取り出された有効行の個数</span>
+       n_tup_ins,                                               <span class=hljs-comment>-- 挿入された行数</span>
+       n_tup_upd,                                               <span class=hljs-comment>-- HOT更新を含む更新された行数</span>
+       n_tup_del,                                               <span class=hljs-comment>-- 削除された行数</span>
+       n_tup_hot_upd,                                           <span class=hljs-comment>-- HOT更新された行数</span>
+       n_live_tup,                                              <span class=hljs-comment>-- 有効行の推定値</span>
+       n_dead_tup,                                              <span class=hljs-comment>-- 不要行の推定値</span>
+       n_mod_since_analyze,                                     <span class=hljs-comment>-- 最後にanalyzeをされてからの変更された行の推定値</span>
+       last_vacuum <span class=hljs-keyword>AT</span> <span class=hljs-type>TIME</span> ZONE <span class=hljs-string>'JST'</span>      <span class=hljs-keyword>AS</span> last_vacuum,      <span class=hljs-comment>-- 最後に明示的に実行されたバキューム処理の日付（VACUUM FULLは含まず）</span>
+       last_autovacuum <span class=hljs-keyword>AT</span> <span class=hljs-type>TIME</span> ZONE <span class=hljs-string>'JST'</span>  <span class=hljs-keyword>AS</span> last_autovacuum,  <span class=hljs-comment>-- 最後に自動バキュームデーモンによってバキュームが行われた日付</span>
+       last_analyze <span class=hljs-keyword>AT</span> <span class=hljs-type>TIME</span> ZONE <span class=hljs-string>'JST'</span>     <span class=hljs-keyword>AS</span> last_analyze,     <span class=hljs-comment>-- 最後に明示的に実行されたアナライズ処理の日付</span>
+       last_autoanalyze <span class=hljs-keyword>AT</span> <span class=hljs-type>TIME</span> ZONE <span class=hljs-string>'JST'</span> <span class=hljs-keyword>AS</span> last_autoanalyze, <span class=hljs-comment>-- 自動バキュームデーモンによってアナライズが行われた日付</span>
+       vacuum_count,                                            <span class=hljs-comment>-- 明示的にバキューム処理が行われた回数（VACUUM FULLは含まず）</span>
+       autovacuum_count,                                        <span class=hljs-comment>-- 自動バキュームデーモンによって行われたバキューム処理の回数</span>
+       analyze_count,                                           <span class=hljs-comment>-- 明示的にアナライズが行われた回数</span>
+       autoanalyze_count                                        <span class=hljs-comment>-- 自動バキュームデーモンによって行われたアナライズの回数</span>
+<span class=hljs-keyword>FROM</span> pg_stat_all_tables
+<span class=hljs-keyword>WHERE</span> schemaname <span class=hljs-operator>=</span> <span class=hljs-string>'public'</span>
+  <span class=hljs-keyword>AND</span> relname <span class=hljs-operator>=</span> <span class=hljs-string>'hoge'</span>;
+</code></pre><p>このビューは当該テーブルを手動で<code>ANALYZE</code>する事で強制的に更新できるようです。<p>テーブルのディスク上のサイズを確認するには<code>pg_class</code>ビューを使用します。<pre><code class="language-sql hljs"><span class=hljs-comment>-- 不思議な力でテーブルのディスク上のサイズが分かるクエリ</span>
+<span class=hljs-keyword>SELECT</span>
+  pgn.nspname,
+  relname,
+  pg_size_pretty(relpages::<span class=hljs-type>bigint</span> <span class=hljs-operator>*</span> <span class=hljs-number>8</span> <span class=hljs-operator>*</span> <span class=hljs-number>1024</span>) <span class=hljs-keyword>AS</span> size,
+  <span class=hljs-keyword>CASE</span>
+    <span class=hljs-keyword>WHEN</span> relkind <span class=hljs-operator>=</span> <span class=hljs-string>'t'</span>
+	  <span class=hljs-keyword>THEN</span> (<span class=hljs-keyword>SELECT</span> pgd.relname <span class=hljs-keyword>FROM</span> pg_class pgd <span class=hljs-keyword>WHERE</span> pgd.reltoastrelid <span class=hljs-operator>=</span> pg.oid)
+    <span class=hljs-keyword>WHEN</span> nspname <span class=hljs-operator>=</span> <span class=hljs-string>'pg_toast'</span> <span class=hljs-keyword>AND</span> relkind <span class=hljs-operator>=</span> <span class=hljs-string>'i'</span>
+      <span class=hljs-keyword>THEN</span> (<span class=hljs-keyword>SELECT</span> pgt.relname <span class=hljs-keyword>FROM</span> pg_class pgt <span class=hljs-keyword>WHERE</span> <span class=hljs-built_in>SUBSTRING</span>(pgt.relname <span class=hljs-keyword>FROM</span> <span class=hljs-number>10</span>) <span class=hljs-operator>=</span> REPLACE(<span class=hljs-built_in>SUBSTRING</span>(pg.relname <span class=hljs-keyword>FROM</span> <span class=hljs-number>10</span>), <span class=hljs-string>'_index'</span>, <span class=hljs-string>''</span>))
+    <span class=hljs-keyword>ELSE</span> (<span class=hljs-keyword>SELECT</span> pgc.relname <span class=hljs-keyword>FROM</span> pg_class pgc <span class=hljs-keyword>WHERE</span> pg.reltoastrelid <span class=hljs-operator>=</span> pgc.oid) <span class=hljs-keyword>END</span>::<span class=hljs-type>varchar</span>
+  <span class=hljs-keyword>AS</span> refrelname,
+  <span class=hljs-keyword>CASE</span>
+    <span class=hljs-keyword>WHEN</span> nspname <span class=hljs-operator>=</span> <span class=hljs-string>'pg_toast'</span> <span class=hljs-keyword>AND</span> relkind <span class=hljs-operator>=</span> <span class=hljs-string>'i'</span>
+	  <span class=hljs-keyword>THEN</span> (<span class=hljs-keyword>SELECT</span> pgts.relname <span class=hljs-keyword>FROM</span> pg_class pgts <span class=hljs-keyword>WHERE</span> pgts.reltoastrelid <span class=hljs-operator>=</span> (
+        <span class=hljs-keyword>SELECT</span>
+          pgt.oid
+        <span class=hljs-keyword>FROM</span>
+		  pg_class pgt
+        <span class=hljs-keyword>WHERE</span>
+		  <span class=hljs-built_in>SUBSTRING</span>(pgt.relname <span class=hljs-keyword>FROM</span> <span class=hljs-number>10</span>) <span class=hljs-operator>=</span> REPLACE(<span class=hljs-built_in>SUBSTRING</span>(pg.relname <span class=hljs-keyword>FROM</span> <span class=hljs-number>10</span>), <span class=hljs-string>'_index'</span>, <span class=hljs-string>''</span>))) <span class=hljs-keyword>END</span>
+  <span class=hljs-keyword>AS</span> relidxrefrelname,
+  relfilenode,
+  relkind,
+  reltuples::<span class=hljs-type>bigint</span>,
+  relpages
+<span class=hljs-keyword>FROM</span>
+  pg_class pg,
+  pg_namespace pgn
+<span class=hljs-keyword>WHERE</span>
+  pg.relnamespace <span class=hljs-operator>=</span> pgn.oid
+  <span class=hljs-keyword>AND</span> pgn.nspname <span class=hljs-keyword>NOT</span> <span class=hljs-keyword>IN</span> (<span class=hljs-string>'information_schema'</span>, <span class=hljs-string>'pg_catalog'</span>)
+<span class=hljs-keyword>ORDER</span> <span class=hljs-keyword>BY</span> relpages <span class=hljs-keyword>DESC</span>;
+</code></pre><p>例として、以下のようなテーブルにランダムな値を1000万行挿入した後にランダムに500万行の書き換えた後のビューの結果を以下に示します。<p><code>n_tup_del</code>が0なのは、クエリ実行前に手動で<code>VACUUM</code>を走らせたためです。たぶん<pre><code class="language-sql hljs"><span class=hljs-keyword>create table</span> hoge
+(
+    ver_qoid     <span class=hljs-type>varchar</span>(<span class=hljs-number>20</span>) <span class=hljs-keyword>not null</span>,
+    ver_num      <span class=hljs-type>integer</span>     <span class=hljs-keyword>not null</span>,
+    item_name    <span class=hljs-type>varchar</span>(<span class=hljs-number>30</span>) <span class=hljs-keyword>not null</span>,
+    update_count <span class=hljs-type>integer</span>     <span class=hljs-keyword>not null</span>
+);
+
+<span class=hljs-keyword>alter table</span> hoge <span class=hljs-keyword>add constraint</span> hoge_pkey <span class=hljs-keyword>primary key</span> (ver_qoid, ver_num);
+</code></pre><p>おわり</div></article><hr><nav class=post-navigation><ul><li>← Previous: <a href=/posts/2021/pg-config-on-windows/ rel=prev>WindowsでもPostgreSQLのチューニングをしたい</a><li><strong>Next: <a href=/posts/2022/blog-move-from-hatena-to-github-page/ rel=next>ブログをはてなからGithub Pageに移したお話</a> →</strong></ul></nav></main><footer><div><a href=/feed.xml> <svg viewbox="0 0 16 16" height=16 width=16 xmlns=http://www.w3.org/2000/svg><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"></path><path d="M5.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-3-8.5a1 1 0 0 1 1-1c5.523 0 10 4.477 10 10a1 1 0 1 1-2 0 8 8 0 0 0-8-8 1 1 0 0 1-1-1zm0 4a1 1 0 0 1 1-1 6 6 0 0 1 6 6 1 1 0 1 1-2 0 4 4 0 0 0-4-4 1 1 0 0 1-1-1z"></path></svg> </a></div></footer>

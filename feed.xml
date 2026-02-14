@@ -1,0 +1,1759 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<feed xmlns="http://www.w3.org/2005/Atom">
+	<title>レンコン畑でつかまえて</title>
+	<subtitle></subtitle>
+	<link href="https://www.jyuch.dev/feed.xml" rel="self"/>
+	<link href="https://www.jyuch.dev/"/>
+	
+	<updated>2026-02-14T10:00:00Z</updated>
+	<id>https://www.jyuch.dev/</id>
+	<author>
+		<name>jyuch</name>
+		<email></email>
+	</author>
+	<entry>
+		<title>Databricksのread_files関数でもExcelファイルを読み込みたい</title>
+		<link href="https://www.jyuch.dev/posts/2026/01-17-excel-read-files/"/>
+		<updated>2026-01-17T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2026/01-17-excel-read-files/</id>
+		<content type="html">&lt;h2&gt;2月8日追記&lt;/h2&gt;
+&lt;p&gt;現時点ではフリガナ問題は解決しています。&lt;/p&gt;
+&lt;p&gt;また、より大きいファイルでも取り込めるようになっていました。
+ですが、調子に乗って大きなサイズを放り込むと処理が終わらないので、その辺はいい感じにする必要があります。&lt;/p&gt;
+&lt;h2&gt;注意事項&lt;/h2&gt;
+&lt;p&gt;本検証は2026年1月17時点の内容で検証しています。
+リリース版は挙動が異なる場合があります。&lt;/p&gt;
+&lt;p&gt;また、Databricks Free Editionで評価しています。
+そのため、商用版と挙動が異なる場合があります。&lt;/p&gt;
+&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;Databricksの&lt;code&gt;read_files&lt;/code&gt;関数はCSVやJSONフォーマットをいい感じに読み込んでくれる関数です。
+その&lt;code&gt;read_files&lt;/code&gt;関数がExcelファイルの読み込みをサポートしました。&lt;/p&gt;
+&lt;p&gt;ですが、Excelフォーマットをプログラムで扱う際のトラップに悩まされてきた生産性アプリケーション開発者も多いのではないでしょうか。&lt;/p&gt;
+&lt;p&gt;そこで、今回はトラップになりそうな部分の評価を行ってみました。&lt;/p&gt;
+&lt;h2&gt;Office Open XMLフォーマット&lt;/h2&gt;
+&lt;p&gt;今回はExcelフォーマットのうち、Office Open XMLフォーマット（&lt;code&gt;xlsx&lt;/code&gt;）を評価してみます。
+そのOOXMLフォーマットのうち、今回の検証で触れる内容について軽く解説をしていきます。&lt;/p&gt;
+&lt;p&gt;OOXMLはXMLの名前がついている通り、主にzipで圧縮されたXMLファイルで構成されています。&lt;/p&gt;
+&lt;p&gt;たとえば、以下のようなExcelファイルをzip展開すると、以下のような構造となっています。&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2026/01-17-excel-read-files/example.xlsx.png&quot; alt=&quot;example.xlsxの見た目&quot;&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-txt&quot;&gt;example.xlsx
+│
+│  [Content_Types].xml
+│
+├─docProps
+│      app.xml
+│      core.xml
+│
+├─xl
+│  │  sharedStrings.xml
+│  │  styles.xml
+│  │  workbook.xml
+│  │
+│  ├─printerSettings
+│  │      printerSettings1.bin
+│  │
+│  ├─theme
+│  │      theme1.xml
+│  │
+│  ├─worksheets
+│  │  │  sheet1.xml
+│  │  │
+│  │  └─_rels
+│  │          sheet1.xml.rels
+│  │
+│  └─_rels
+│          workbook.xml.rels
+│
+└─_rels
+        .rels
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;そのうち、内容を確認する際に見るのが以下の二つのファイルになります。&lt;/p&gt;
+&lt;h3&gt;&lt;code&gt;xl&#92;worksheets&#92;sheet1.xml&lt;/code&gt;&lt;/h3&gt;
+&lt;p&gt;&lt;code&gt;xl&#92;worksheets&lt;/code&gt;以下にはシート毎にシートの内容が含まれているXMLファイルが格納されています。&lt;/p&gt;
+&lt;p&gt;上記の例だと、こんな感じに内容になるはずです。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;?xml version=&amp;quot;1.0&amp;quot; encoding=&amp;quot;UTF-8&amp;quot; standalone=&amp;quot;yes&amp;quot;?&amp;gt;
+&amp;lt;worksheet xmlns=&amp;quot;http://schemas.openxmlformats.org/spreadsheetml/2006/main&amp;quot;
+    xmlns:r=&amp;quot;http://schemas.openxmlformats.org/officeDocument/2006/relationships&amp;quot;
+    xmlns:mc=&amp;quot;http://schemas.openxmlformats.org/markup-compatibility/2006&amp;quot;
+    mc:Ignorable=&amp;quot;x14ac xr xr2 xr3&amp;quot;
+    xmlns:x14ac=&amp;quot;http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac&amp;quot;
+    xmlns:xr=&amp;quot;http://schemas.microsoft.com/office/spreadsheetml/2014/revision&amp;quot;
+    xmlns:xr2=&amp;quot;http://schemas.microsoft.com/office/spreadsheetml/2015/revision2&amp;quot;
+    xmlns:xr3=&amp;quot;http://schemas.microsoft.com/office/spreadsheetml/2016/revision3&amp;quot;
+    xr:uid=&amp;quot;{00000000-0001-0000-0000-000000000000}&amp;quot;&amp;gt;
+    &amp;lt;dimension ref=&amp;quot;A1:B2&amp;quot; /&amp;gt;
+    &amp;lt;sheetViews&amp;gt;
+        &amp;lt;sheetView tabSelected=&amp;quot;1&amp;quot; workbookViewId=&amp;quot;0&amp;quot; /&amp;gt;
+    &amp;lt;/sheetViews&amp;gt;
+    &amp;lt;sheetFormatPr defaultRowHeight=&amp;quot;18.75&amp;quot; /&amp;gt;
+    &amp;lt;sheetData&amp;gt;
+        &amp;lt;row r=&amp;quot;1&amp;quot; spans=&amp;quot;1:2&amp;quot;&amp;gt;
+            &amp;lt;c r=&amp;quot;A1&amp;quot; t=&amp;quot;s&amp;quot;&amp;gt;
+                &amp;lt;v&amp;gt;0&amp;lt;/v&amp;gt;
+            &amp;lt;/c&amp;gt;
+        &amp;lt;/row&amp;gt;
+        &amp;lt;row r=&amp;quot;2&amp;quot; spans=&amp;quot;1:2&amp;quot;&amp;gt;
+            &amp;lt;c r=&amp;quot;B2&amp;quot; t=&amp;quot;s&amp;quot;&amp;gt;
+                &amp;lt;v&amp;gt;1&amp;lt;/v&amp;gt;
+            &amp;lt;/c&amp;gt;
+        &amp;lt;/row&amp;gt;
+    &amp;lt;/sheetData&amp;gt;
+    &amp;lt;phoneticPr fontId=&amp;quot;1&amp;quot; /&amp;gt;
+    &amp;lt;pageMargins left=&amp;quot;0.7&amp;quot; right=&amp;quot;0.7&amp;quot; top=&amp;quot;0.75&amp;quot; bottom=&amp;quot;0.75&amp;quot; header=&amp;quot;0.3&amp;quot; footer=&amp;quot;0.3&amp;quot; /&amp;gt;
+    &amp;lt;pageSetup paperSize=&amp;quot;9&amp;quot; orientation=&amp;quot;portrait&amp;quot; r:id=&amp;quot;rId1&amp;quot; /&amp;gt;
+&amp;lt;/worksheet&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;code&gt;A1&lt;/code&gt;と&lt;code&gt;B2&lt;/code&gt;セルにデータが含まれているのが分かりますね。
+ですが、謎の数字&lt;code&gt;0&lt;/code&gt;と&lt;code&gt;1&lt;/code&gt;があるだけで、内容は特には記述されていません。&lt;/p&gt;
+&lt;p&gt;テキスト情報はどこに行ったのでしょう？&lt;/p&gt;
+&lt;p&gt;その答えはShared String Table（SST、&lt;code&gt;sharedStrings.xml&lt;/code&gt;）の中にあります。&lt;/p&gt;
+&lt;h3&gt;&lt;code&gt;xl&#92;sharedStrings.xml&lt;/code&gt;&lt;/h3&gt;
+&lt;p&gt;SSTはその名の通り、複数の場所から参照されるテキスト情報を格納するためテーブルです。&lt;/p&gt;
+&lt;p&gt;上記の例だとシートはSSTのインデックス番号を参照していたことになります。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;?xml version=&amp;quot;1.0&amp;quot; encoding=&amp;quot;UTF-8&amp;quot; standalone=&amp;quot;yes&amp;quot;?&amp;gt;
+&amp;lt;sst xmlns=&amp;quot;http://schemas.openxmlformats.org/spreadsheetml/2006/main&amp;quot; count=&amp;quot;2&amp;quot; uniqueCount=&amp;quot;2&amp;quot;&amp;gt;
+    &amp;lt;si&amp;gt;
+        &amp;lt;t&amp;gt;Hello Excel&amp;lt;/t&amp;gt;
+        &amp;lt;phoneticPr fontId=&amp;quot;1&amp;quot; /&amp;gt;
+    &amp;lt;/si&amp;gt;
+    &amp;lt;si&amp;gt;
+        &amp;lt;t&amp;gt;こんにちはExcel&amp;lt;/t&amp;gt;
+        &amp;lt;phoneticPr fontId=&amp;quot;1&amp;quot; /&amp;gt;
+    &amp;lt;/si&amp;gt;
+&amp;lt;/sst&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;なお、文字情報は必ずSSTに格納しなければならない訳ではなく、Excelを出力するライブラリはシートのXMLに直接文字を格納する場合が多いです。&lt;/p&gt;
+&lt;h2&gt;Excelファイルの読み込み&lt;/h2&gt;
+&lt;p&gt;というわけで、Excelの深淵を覗く準備ができたところで&lt;code&gt;read_files&lt;/code&gt;関数でファイルを読み込んでみましょう。&lt;/p&gt;
+&lt;h3&gt;単純な例&lt;/h3&gt;
+&lt;p&gt;以下のような単純なExcelファイルを用意します。&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2026/01-17-excel-read-files/01_simple_files.xlsx.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;最低限のオプションだけ設定すると以下のように出力されます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sql&quot;&gt;SELECT
+  *
+FROM
+  read_files(
+    &amp;quot;/Volumes/excel_read_files/default/files/01_simple_files.xlsx&amp;quot;,
+    format =&amp;gt; &amp;quot;excel&amp;quot;,
+    schemaEvolutionMode =&amp;gt; &amp;quot;none&amp;quot;
+  )
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2026/01-17-excel-read-files/output_01.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;スキーマを推論してくれるので、日付や数字もそれぞれの型として認識してくれています。&lt;/p&gt;
+&lt;p&gt;ですが、小数が少し怪しいですね。
+内部的にはこの形で格納されているので、&lt;code&gt;read_files&lt;/code&gt;関数が悪いわけではなさそうです。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;?xml version=&amp;quot;1.0&amp;quot; encoding=&amp;quot;UTF-8&amp;quot; standalone=&amp;quot;yes&amp;quot;?&amp;gt;
+&amp;lt;worksheet&amp;gt;
+    &amp;lt;sheetData&amp;gt;
+        &amp;lt;row r=&amp;quot;1&amp;quot; spans=&amp;quot;1:4&amp;quot;&amp;gt;
+            &amp;lt;c r=&amp;quot;C1&amp;quot;&amp;gt;
+                &amp;lt;v&amp;gt;1.1000000000000001&amp;lt;/v&amp;gt;
+            &amp;lt;/c&amp;gt;
+        &amp;lt;/row&amp;gt;
+        &amp;lt;row r=&amp;quot;2&amp;quot; spans=&amp;quot;1:4&amp;quot;&amp;gt;
+            &amp;lt;c r=&amp;quot;C2&amp;quot;&amp;gt;
+                &amp;lt;v&amp;gt;2.2000000000000002&amp;lt;/v&amp;gt;
+            &amp;lt;/c&amp;gt;
+        &amp;lt;/row&amp;gt;
+        &amp;lt;row r=&amp;quot;3&amp;quot; spans=&amp;quot;1:4&amp;quot;&amp;gt;
+            &amp;lt;c r=&amp;quot;C3&amp;quot;&amp;gt;
+                &amp;lt;v&amp;gt;3.3&amp;lt;/v&amp;gt;
+            &amp;lt;/c&amp;gt;
+        &amp;lt;/row&amp;gt;
+        &amp;lt;row r=&amp;quot;4&amp;quot; spans=&amp;quot;1:4&amp;quot;&amp;gt;
+            &amp;lt;c r=&amp;quot;C4&amp;quot;&amp;gt;
+                &amp;lt;v&amp;gt;4.4000000000000004&amp;lt;/v&amp;gt;
+            &amp;lt;/c&amp;gt;
+        &amp;lt;/row&amp;gt;
+        &amp;lt;row r=&amp;quot;5&amp;quot; spans=&amp;quot;1:4&amp;quot;&amp;gt;
+            &amp;lt;c r=&amp;quot;C5&amp;quot;&amp;gt;
+                &amp;lt;v&amp;gt;5.5&amp;lt;/v&amp;gt;
+            &amp;lt;/c&amp;gt;
+        &amp;lt;/row&amp;gt;
+    &amp;lt;/sheetData&amp;gt;
+&amp;lt;/worksheet&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;型が既知なのであれば、あらかじめスキーマヒントを与えておいたほうが良いかもしれません。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sql&quot;&gt;SELECT
+  *
+FROM
+  read_files(
+    &amp;quot;/Volumes/excel_read_files/default/files/01_simple_files.xlsx&amp;quot;,
+    format =&amp;gt; &amp;quot;excel&amp;quot;,
+    schemaEvolutionMode =&amp;gt; &amp;quot;none&amp;quot;,
+    schemaHints =&amp;gt; &amp;quot;_c2 decimal(5,1)&amp;quot;
+  )
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2026/01-17-excel-read-files/output_02.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;ちなみに、&lt;code&gt;inferColumnTypes&lt;/code&gt;はExcel読み込みでは考慮されないようです。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sql&quot;&gt;SELECT
+  *
+FROM
+  read_files(
+    &amp;quot;/Volumes/excel_read_files/default/files/01_simple_files.xlsx&amp;quot;,
+    format =&amp;gt; &amp;quot;excel&amp;quot;,
+    schemaEvolutionMode =&amp;gt; &amp;quot;none&amp;quot;,
+    inferColumnTypes =&amp;gt; false
+  )
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2026/01-17-excel-read-files/output_03.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;スキーマヒントを与えて強制的に文字列とすると、to_stringをしたような形式になります。&lt;/p&gt;
+&lt;p&gt;また、日付は&lt;code&gt;MM/DD/YY&lt;/code&gt;形式になります。USロケールなのかもしれません。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sql&quot;&gt;SELECT
+  *
+FROM
+  read_files(
+    &amp;quot;/Volumes/excel_read_files/default/files/01_simple_files.xlsx&amp;quot;,
+    format =&amp;gt; &amp;quot;excel&amp;quot;,
+    schemaEvolutionMode =&amp;gt; &amp;quot;none&amp;quot;,
+    schemaHints =&amp;gt; &amp;quot;_c1 string, _c2 string, _c3 string&amp;quot;
+  )
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2026/01-17-excel-read-files/output_04.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;h3&gt;日本語を含む例&lt;/h3&gt;
+&lt;p&gt;次はよくオフィスで流通していそうなファイルを読み込んでみます。&lt;/p&gt;
+&lt;p&gt;今回の検証で初めて知ったのですが、Excelは変換時の元テキストをフリガナとして格納してくれるっぽいです。&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2026/01-17-excel-read-files/02_%E6%97%A5%E6%9C%AC%E8%AA%9E%E3%82%92%E5%90%AB%E3%82%80%E3%83%95%E3%82%A1%E3%82%A4%E3%83%AB.xlsx.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;関係ないセルを読まないよう、&lt;code&gt;dataAddress&lt;/code&gt;で読み込む場所を明示してあげます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sql&quot;&gt;SELECT
+  *
+FROM
+  read_files(
+    &amp;quot;/Volumes/excel_read_files/default/files/02_日本語を含むファイル.xlsx&amp;quot;,
+    dataAddress =&amp;gt; &amp;quot;&#39;お供　給与表&#39;!B2:C5&amp;quot;,
+    headerRows =&amp;gt; 1,
+    format =&amp;gt; &amp;quot;excel&amp;quot;,
+    schemaEvolutionMode =&amp;gt; &amp;quot;none&amp;quot;
+  )
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2026/01-17-excel-read-files/output_05.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;良くないですね。&lt;/strong&gt;
+フリガナも拾ってきてしまっています。&lt;/p&gt;
+&lt;p&gt;少なくとも日本語だと意図してフリガナを拾ってほしいケースはあまりないと思うので、GAまでにフリガナを拾わないか、オプションで選択出来るようになるといいなと思います。&lt;/p&gt;
+&lt;p&gt;ちなみに、この例だとSSTはこのようになっています。
+シート名として入力したテキストもフォネティックを拾っているとは思いませんでした。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;?xml version=&amp;quot;1.0&amp;quot; encoding=&amp;quot;UTF-8&amp;quot; standalone=&amp;quot;yes&amp;quot;?&amp;gt;
+&amp;lt;sst xmlns=&amp;quot;http://schemas.openxmlformats.org/spreadsheetml/2006/main&amp;quot; count=&amp;quot;8&amp;quot; uniqueCount=&amp;quot;8&amp;quot;&amp;gt;
+    &amp;lt;si&amp;gt;
+        &amp;lt;t&amp;gt;お供&amp;lt;/t&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;1&amp;quot; eb=&amp;quot;2&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;トモ&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;phoneticPr fontId=&amp;quot;1&amp;quot; /&amp;gt;
+    &amp;lt;/si&amp;gt;
+    &amp;lt;si&amp;gt;
+        &amp;lt;t&amp;gt;きび団子支給数&amp;lt;/t&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;2&amp;quot; eb=&amp;quot;4&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;ダンゴ&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;4&amp;quot; eb=&amp;quot;7&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;シキュウスウ&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;phoneticPr fontId=&amp;quot;1&amp;quot; /&amp;gt;
+    &amp;lt;/si&amp;gt;
+    &amp;lt;si&amp;gt;
+        &amp;lt;t&amp;gt;猿&amp;lt;/t&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;0&amp;quot; eb=&amp;quot;1&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;サル&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;phoneticPr fontId=&amp;quot;1&amp;quot; /&amp;gt;
+    &amp;lt;/si&amp;gt;
+    &amp;lt;si&amp;gt;
+        &amp;lt;t&amp;gt;犬&amp;lt;/t&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;0&amp;quot; eb=&amp;quot;1&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;イヌ&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;phoneticPr fontId=&amp;quot;1&amp;quot; /&amp;gt;
+    &amp;lt;/si&amp;gt;
+    &amp;lt;si&amp;gt;
+        &amp;lt;t&amp;gt;雉&amp;lt;/t&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;0&amp;quot; eb=&amp;quot;1&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;キジ&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;phoneticPr fontId=&amp;quot;1&amp;quot; /&amp;gt;
+    &amp;lt;/si&amp;gt;
+    &amp;lt;si&amp;gt;
+        &amp;lt;t&amp;gt;令和8年1月17日改定&amp;lt;/t&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;0&amp;quot; eb=&amp;quot;2&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;レイワ&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;3&amp;quot; eb=&amp;quot;4&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;ネン&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;5&amp;quot; eb=&amp;quot;6&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;ガツ&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;8&amp;quot; eb=&amp;quot;9&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;ニチ&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;9&amp;quot; eb=&amp;quot;11&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;カイテイ&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;phoneticPr fontId=&amp;quot;1&amp;quot; /&amp;gt;
+    &amp;lt;/si&amp;gt;
+    &amp;lt;si&amp;gt;
+        &amp;lt;t&amp;gt;※変更時はおじいさんとおばあさんの承認を得ること&amp;lt;/t&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;1&amp;quot; eb=&amp;quot;4&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;ヘンコウジ&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;17&amp;quot; eb=&amp;quot;19&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;ショウニン&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;20&amp;quot; eb=&amp;quot;21&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;エ&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;phoneticPr fontId=&amp;quot;1&amp;quot; /&amp;gt;
+    &amp;lt;/si&amp;gt;
+    &amp;lt;si&amp;gt;
+        &amp;lt;t&amp;gt;全然関係ないデータ&amp;lt;/t&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;0&amp;quot; eb=&amp;quot;4&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;ゼンゼンカンケイ&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;phoneticPr fontId=&amp;quot;1&amp;quot; /&amp;gt;
+    &amp;lt;/si&amp;gt;
+&amp;lt;/sst&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;手動でフリガナを消してあげると意図した感じに取り込んでくれます。&lt;/p&gt;
+&lt;p&gt;ただし、手動で消すのは結構めんどくさいので、前処理でフリガナを消すプログラムを動かすとかでしょうか・・・&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sql&quot;&gt;SELECT
+  *
+FROM
+  read_files(
+    &amp;quot;/Volumes/excel_read_files/default/files/03_日本語を含むファイル_フリガナ除去.xlsx&amp;quot;,
+    dataAddress =&amp;gt; &amp;quot;&#39;お供　給与表&#39;!B2:C5&amp;quot;,
+    headerRows =&amp;gt; 1,
+    format =&amp;gt; &amp;quot;excel&amp;quot;,
+    schemaEvolutionMode =&amp;gt; &amp;quot;none&amp;quot;
+  )
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2026/01-17-excel-read-files/output_06.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;?xml version=&amp;quot;1.0&amp;quot; encoding=&amp;quot;UTF-8&amp;quot; standalone=&amp;quot;yes&amp;quot;?&amp;gt;
+&amp;lt;sst xmlns=&amp;quot;http://schemas.openxmlformats.org/spreadsheetml/2006/main&amp;quot; count=&amp;quot;8&amp;quot; uniqueCount=&amp;quot;8&amp;quot;&amp;gt;
+    &amp;lt;si&amp;gt;
+        &amp;lt;t&amp;gt;令和8年1月17日改定&amp;lt;/t&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;0&amp;quot; eb=&amp;quot;2&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;レイワ&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;3&amp;quot; eb=&amp;quot;4&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;ネン&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;5&amp;quot; eb=&amp;quot;6&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;ガツ&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;8&amp;quot; eb=&amp;quot;9&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;ニチ&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;9&amp;quot; eb=&amp;quot;11&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;カイテイ&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;phoneticPr fontId=&amp;quot;1&amp;quot; /&amp;gt;
+    &amp;lt;/si&amp;gt;
+    &amp;lt;si&amp;gt;
+        &amp;lt;t&amp;gt;※変更時はおじいさんとおばあさんの承認を得ること&amp;lt;/t&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;1&amp;quot; eb=&amp;quot;4&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;ヘンコウジ&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;17&amp;quot; eb=&amp;quot;19&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;ショウニン&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;20&amp;quot; eb=&amp;quot;21&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;エ&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;phoneticPr fontId=&amp;quot;1&amp;quot; /&amp;gt;
+    &amp;lt;/si&amp;gt;
+    &amp;lt;si&amp;gt;
+        &amp;lt;t&amp;gt;全然関係ないデータ&amp;lt;/t&amp;gt;
+        &amp;lt;rPh sb=&amp;quot;0&amp;quot; eb=&amp;quot;4&amp;quot;&amp;gt;
+            &amp;lt;t&amp;gt;ゼンゼンカンケイ&amp;lt;/t&amp;gt;
+        &amp;lt;/rPh&amp;gt;
+        &amp;lt;phoneticPr fontId=&amp;quot;1&amp;quot; /&amp;gt;
+    &amp;lt;/si&amp;gt;
+    &amp;lt;si&amp;gt;
+        &amp;lt;t&amp;gt;お供&amp;lt;/t&amp;gt;
+        &amp;lt;phoneticPr fontId=&amp;quot;1&amp;quot; /&amp;gt;
+    &amp;lt;/si&amp;gt;
+    &amp;lt;si&amp;gt;
+        &amp;lt;t&amp;gt;きび団子支給数&amp;lt;/t&amp;gt;
+        &amp;lt;phoneticPr fontId=&amp;quot;1&amp;quot; /&amp;gt;
+    &amp;lt;/si&amp;gt;
+    &amp;lt;si&amp;gt;
+        &amp;lt;t&amp;gt;猿&amp;lt;/t&amp;gt;
+        &amp;lt;phoneticPr fontId=&amp;quot;1&amp;quot; /&amp;gt;
+    &amp;lt;/si&amp;gt;
+    &amp;lt;si&amp;gt;
+        &amp;lt;t&amp;gt;犬&amp;lt;/t&amp;gt;
+        &amp;lt;phoneticPr fontId=&amp;quot;1&amp;quot; /&amp;gt;
+    &amp;lt;/si&amp;gt;
+    &amp;lt;si&amp;gt;
+        &amp;lt;t&amp;gt;雉&amp;lt;/t&amp;gt;
+        &amp;lt;phoneticPr fontId=&amp;quot;1&amp;quot; /&amp;gt;
+    &amp;lt;/si&amp;gt;
+&amp;lt;/sst&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;計算式を含む例&lt;/h3&gt;
+&lt;p&gt;次は式を含むExcelファイルを読み込ませてみます。&lt;/p&gt;
+&lt;p&gt;ドキュメントページでは&lt;a href=&quot;https://docs.databricks.com/aws/ja/query/formats/excel&quot;&gt;評価された数式を取り込みます&lt;/a&gt;とありますが、どのような意味なのでしょうか。&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2026/01-17-excel-read-files/04_formula.xlsx.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sql&quot;&gt;SELECT
+  *
+FROM
+  read_files(
+    &amp;quot;/Volumes/excel_read_files/default/files/04_formula.xlsx&amp;quot;,
+    format =&amp;gt; &amp;quot;excel&amp;quot;,
+    schemaEvolutionMode =&amp;gt; &amp;quot;none&amp;quot;
+  )
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2026/01-17-excel-read-files/output_07.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;エクセルで数式セルを作成すると、内部的には数式と共に計算済みの値が格納されています。
+ドキュメントの「評価された数式を取り込みます」とはおそらく内部的に保持されている計算済みの値を取り込むということを言っているのだと思われます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-xml&quot;&gt;&amp;lt;?xml version=&amp;quot;1.0&amp;quot; encoding=&amp;quot;UTF-8&amp;quot; standalone=&amp;quot;yes&amp;quot;?&amp;gt;
+&amp;lt;worksheet&amp;gt;
+    &amp;lt;sheetData&amp;gt;
+        &amp;lt;row r=&amp;quot;1&amp;quot; spans=&amp;quot;1:3&amp;quot;&amp;gt;
+            &amp;lt;c r=&amp;quot;A1&amp;quot;&amp;gt;
+                &amp;lt;v&amp;gt;1&amp;lt;/v&amp;gt;
+            &amp;lt;/c&amp;gt;
+            &amp;lt;c r=&amp;quot;B1&amp;quot;&amp;gt;
+                &amp;lt;v&amp;gt;2&amp;lt;/v&amp;gt;
+            &amp;lt;/c&amp;gt;
+            &amp;lt;c r=&amp;quot;C1&amp;quot;&amp;gt;
+                &amp;lt;f&amp;gt;A1+B1&amp;lt;/f&amp;gt;
+                &amp;lt;v&amp;gt;3&amp;lt;/v&amp;gt;
+            &amp;lt;/c&amp;gt;
+        &amp;lt;/row&amp;gt;
+    &amp;lt;/sheetData&amp;gt;
+&amp;lt;/worksheet&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;では、計算済みの値が格納されないケースがあるのでしょうか。&lt;/p&gt;
+&lt;p&gt;全部のケースを確認した訳ではありませんが、ライブラリを使用してExcelファイルをプログラムから作成する場合は数式のみが格納されて計算済みの値が格納されない場合が多いです。&lt;/p&gt;
+&lt;p&gt;たとえば、以下のようなコードを使用して上記のExcelと同じようなファイルを作成したとします。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-python&quot;&gt;import openpyxl
+
+
+def main():
+    wb = openpyxl.Workbook()
+    sheet = wb.active
+
+    for it in range(1, 5):
+        sheet.cell(it, 1).value = it
+        sheet.cell(it, 2).value = it + 1
+        sheet.cell(it, 3).value = f&amp;quot;=A{it}+B{it}&amp;quot;
+
+    wb.save(&amp;quot;05_formula_no_value.xlsx&amp;quot;)
+
+
+if __name__ == &amp;quot;__main__&amp;quot;:
+    main()
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Excelで開くと未計算のセルは計算されて表示されますが、&lt;code&gt;read_files&lt;/code&gt;関数では計算済みの値が無いため、正しく取得できていません。&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2026/01-17-excel-read-files/05_formula_no_value.xlsx.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sql&quot;&gt;SELECT
+  *
+FROM
+  read_files(
+    &amp;quot;/Volumes/excel_read_files/default/files/05_formula_no_value.xlsx&amp;quot;,
+    format =&amp;gt; &amp;quot;excel&amp;quot;,
+    schemaEvolutionMode =&amp;gt; &amp;quot;none&amp;quot;
+  )
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2026/01-17-excel-read-files/output_08.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;h3&gt;複数のファイル&lt;/h3&gt;
+&lt;p&gt;問題ないとは思いますが、念のため複数のファイルの読み込みを試してみます。&lt;/p&gt;
+&lt;p&gt;以下のようなコードで100行×100ファイルのExcelを生成して読み込んでみます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-python&quot;&gt;import random
+import string
+
+import openpyxl
+
+
+def randomname(n):
+    return &amp;quot;&amp;quot;.join(random.choices(string.ascii_letters + string.digits, k=n))
+
+
+def main():
+    for i in range(1, 101):
+        print(f&amp;quot;06_excel_files&#92;&#92;book_{i:0&amp;gt;3}.xlsx&amp;quot;)
+        wb = openpyxl.Workbook()
+        sheet = wb.active
+
+        for r in range(1, 101):
+            sheet.cell(r, 1).value = i
+            sheet.cell(r, 2).value = r
+
+            for c in range(3, 6):
+                sheet.cell(r, c).value = randomname(10)
+
+            for c in range(6, 9):
+                sheet.cell(r, c).value = random.randint(0, 100)
+
+        wb.save(f&amp;quot;06_excel_files&#92;&#92;book_{i:0&amp;gt;3}.xlsx&amp;quot;)
+
+
+if __name__ == &amp;quot;__main__&amp;quot;:
+    main()
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sql&quot;&gt;SELECT
+  *
+FROM
+  read_files(
+    &amp;quot;/Volumes/excel_read_files/default/files/06_excel_files/&amp;quot;,
+    format =&amp;gt; &amp;quot;excel&amp;quot;,
+    schemaEvolutionMode =&amp;gt; &amp;quot;none&amp;quot;
+  )
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2026/01-17-excel-read-files/output_09.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;良さそうですね。&lt;/p&gt;
+&lt;h3&gt;サイズの大きいファイル&lt;/h3&gt;
+&lt;p&gt;JavaでExcelを読み書きする代表的なライブラリと言えば&lt;a href=&quot;https://poi.apache.org/&quot;&gt;Apache POI&lt;/a&gt;があります。&lt;/p&gt;
+&lt;p&gt;POIはUser API（Excelファイルをインメモリで展開するAPI）で巨大なファイルを扱おうとするとOOMでプログラムが爆散するという悲しき事故が発生しがちです。&lt;/p&gt;
+&lt;p&gt;SparkはScala、すなわちJVMで動作するので同じ事故が発生するか否かは割と気になりますよね。&lt;/p&gt;
+&lt;p&gt;以下のようなコードでそれぞれの行数を持つExcelファイルを作って、順番に読み込ませてみます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-python&quot;&gt;import random
+import string
+
+import openpyxl
+
+ROWS = [
+    10000,
+    10100,
+    10101,
+    10102,
+    10103,
+    10104,
+    10105,
+    10106,
+    10107,
+    10108,
+    10109,
+    10110,
+    10120,
+    10130,
+    10140,
+    10150,
+    10160,
+    10170,
+    10180,
+    10190,
+    10200,
+    10300,
+    10400,
+    10500,
+    11000,
+]
+
+
+def randomname(n):
+    return &amp;quot;&amp;quot;.join(random.choices(string.ascii_letters + string.digits, k=n))
+
+
+def main():
+    for row_count in ROWS:
+        print(f&amp;quot;07_large_excel_files&#92;&#92;book_{row_count}.xlsx&amp;quot;)
+        wb = openpyxl.Workbook()
+        sheet = wb.active
+
+        for r in range(1, row_count + 1):
+            sheet.cell(r, 1).value = row_count
+            sheet.cell(r, 2).value = r
+
+            for c in range(3, 6):
+                sheet.cell(r, c).value = randomname(10)
+
+            for c in range(6, 9):
+                sheet.cell(r, c).value = random.randint(0, 100)
+
+        wb.save(f&amp;quot;07_large_excel_files&#92;&#92;book_{row_count}.xlsx&amp;quot;)
+
+
+if __name__ == &amp;quot;__main__&amp;quot;:
+    main()
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;詳細は省きますが、私の環境では10102行のファイルまでなら読み込んでくれましたが、10103行のファイルからは関数が返ってこなくなりました。&lt;/p&gt;
+&lt;p&gt;関数の内部的な制限に引っかかったのか、それともDatabricks Free Editionのなんらかのレートリミットに引っかかったのかは分かりませんが、あまり大量の行数を有するファイルの読み込みには向かないようです。&lt;/p&gt;
+&lt;h2&gt;おわりに&lt;/h2&gt;
+&lt;p&gt;いくつか気になる点はありましたが、ベータ版の機能なのでGAまでには修正されると思います。&lt;/p&gt;
+&lt;p&gt;Pythonでロジックを書かなくてもいい感じにExcelファイルが読み込めると、ファイルサーバ内に眠っているExcelファイルのデータの利活用のハードルも低くなると思います。&lt;/p&gt;
+&lt;p&gt;GAが待ち遠しい機能ですね。&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/jyuch/excel-read-files&quot;&gt;jyuch / excel-read-files&lt;/a&gt;&lt;/p&gt;
+&lt;h2&gt;余談&lt;/h2&gt;
+&lt;p&gt;&lt;s&gt;ファイルをドラッグアンドドロップでテーブルを作れる機能も内部的に&lt;code&gt;read_files&lt;/code&gt;関数を使っているのか、現時点では同様に日本語のフリガナを拾ってしまいます。&lt;/s&gt;&lt;/p&gt;
+&lt;p&gt;こちらも解決済みです。やったぜ&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2026/01-17-excel-read-files/gui_ingestion.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>2025年の振り返りとか</title>
+		<link href="https://www.jyuch.dev/posts/2025/12-31-look-back-2025/"/>
+		<updated>2025-12-31T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/12-31-look-back-2025/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;2025年の振り返りです。&lt;/p&gt;
+&lt;h2&gt;Databricks&lt;/h2&gt;
+&lt;p&gt;今年はお仕事でDatabricksをかなり触ってきました。&lt;/p&gt;
+&lt;p&gt;特にDatabricksの環境を完全にゼロから（新規契約のAWSアカウントから）構築するのはあまりない経験だと思うので、珍しい経験が出来たなと思います。&lt;/p&gt;
+&lt;p&gt;他にも基幹システムからのデータ取り込みやデータ加工パイプラインの構築・ガバナンス設計など&lt;s&gt;運用の全部を一人でやらさせられてる&lt;/s&gt;大変貴重な経験を積ませていただいており大変うれしく思います。&lt;/p&gt;
+&lt;p&gt;個人的にはDatabricksは少なくとも数年はデータとAI領域でのトップを走るプロダクトだと思っているので、しばらくはDababricksのお仕事を続けたいなとは思ってます。&lt;/p&gt;
+&lt;h2&gt;生成AI&lt;/h2&gt;
+&lt;p&gt;データ基盤を触っているとAI絡みのお話を頂くので、RAGや&lt;a href=&quot;https://www.jyuch.dev/posts/2025/12-28-dspy-kasu-no-uso/&quot;&gt;プロンプト自動最適化&lt;/a&gt;などのテクノロジはちょこちょこと触っていました。
+特にDSPyとMLflowはかなり注目しているので、2026年もこれらのプロダクトを追いかけたいと思っています。&lt;/p&gt;
+&lt;p&gt;ただ、AIエージェントは技術的な領域としては面白いのですが、全社的なワークロードを動かしたときの性能面・コスト面の監視や基幹システムとの連接など考えないといけないことが多いなと現時点でも感じています。
+2026年はこの辺の本格的な開発・運用が始まりそうなので2026年はつらみポイントが高い年になりそうです。&lt;/p&gt;
+&lt;p&gt;この辺を真面目にやろうとすると事業会社の内部でどうこう出来るレベルを超えそうと思っているのですが、皆さんどう考えてるんでしょうね？&lt;/p&gt;
+&lt;h2&gt;資格とか&lt;/h2&gt;
+&lt;p&gt;今年は&lt;a href=&quot;https://www.jyuch.dev/posts/2025/07-13-2025-spring-nw/&quot;&gt;ネットワークスペシャリスト試験&lt;/a&gt;と&lt;a href=&quot;https://www.jyuch.dev/posts/2025/07-04-saa-c03/&quot;&gt;SAA&lt;/a&gt;の2つを合格・取得できました。&lt;/p&gt;
+&lt;p&gt;ネットワークスペシャリスト試験で勉強した内容は普通に日常の業務&lt;s&gt;やテキトーなことを吹っ掛けてくる自称有識者をボコすの&lt;/s&gt;に役に立つので、ネットワークに触る人はみんな勉強すると良いと思います。&lt;/p&gt;
+&lt;p&gt;IPAの試験体系が改定されて高度試験が消える前にデータベーススペシャリストもとっておこうかなと思ってます。
+セキュリティスペシャリストはどうなるんでしょうね？あれだけ体系が違うっぽいので残る気がしますが。&lt;/p&gt;
+&lt;p&gt;AWS系の資格について特にコンプとかは考えていないのですが、SAPを持ってると貰えるお小遣いが増えるので受けてもいいかなと思っています。
+まぁ、弊社は全体的に資格難易度と金額が明らかに乖離しているのでにゃーん（社会性フィルタ）&lt;/p&gt;
+&lt;p&gt;また、Databricks Certified Data Engineer Associateとかはあまり難しくなさそうなので試しに取ってみたいなとは思ってるのですが、受験料がｸｯｿ高いのと、弊社内でお小遣いが貰える資格ではないのでちょっと迷ってます。&lt;/p&gt;
+&lt;h2&gt;コミュニティ&lt;/h2&gt;
+&lt;p&gt;東京に勤務することになってから今年はDatabricksのユーザグループであるJEDAIのミートアップから始まり、結構な数の勉強会やもくもく会にお邪魔させていただきました。&lt;/p&gt;
+&lt;p&gt;とくに&lt;a href=&quot;https://mito-web-engineer.connpass.com/&quot;&gt;Ibaraki.dev&lt;/a&gt;におかれましては、&lt;a href=&quot;https://speakerdeck.com/jyuch/start-your-own-dns-forwarder-with-hickory-dns&quot;&gt;いきなりDNSの話をし始めたり誰も使ってないDNSのライブラリの話をし始めたり&lt;/a&gt;と大変ご迷惑をお掛けしました。&lt;/p&gt;
+&lt;p&gt;いろんな人と交流するとそれぞれの組織の考え方が分かったり、どんな組織でも大体似たようなことで悩んでるんだなというのが分かって楽しいですね。&lt;/p&gt;
+&lt;h2&gt;おわりに&lt;/h2&gt;
+&lt;p&gt;2026年も飛躍の年にしたいですね。&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>ダウナー系生成AIに毎日カスの嘘を流し込まれたい</title>
+		<link href="https://www.jyuch.dev/posts/2025/12-28-dspy-kasu-no-uso/"/>
+		<updated>2025-12-28T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/12-28-dspy-kasu-no-uso/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;最近は仕事でもAIエージェントの話を聞くことが多くなってきました。&lt;/p&gt;
+&lt;p&gt;AIエージェントの性能はプロンプトの記述で大きく変わってきます。
+ですが、プロンプトが少し変わったり、ナレッジカットオフが変わっただけで挙動が大きく変わるなんて話も聞きます。&lt;/p&gt;
+&lt;p&gt;プロンプトの人力での調整はつらみポイントがとても高いので、個人的にはDSPyのようなプロンプト自動最適化に大きな期待を寄せています。&lt;/p&gt;
+&lt;p&gt;そこで、今回は与えられたキーワードからいわゆる「カスの嘘」を生成するためのプロンプトをDSPyを使っての最適化を試してみます。&lt;/p&gt;
+&lt;h2&gt;カスの嘘&lt;/h2&gt;
+&lt;p&gt;まず、生成AIに生成させたいカスの嘘の要件を確認してみましょう。&lt;/p&gt;
+&lt;p&gt;ここで生成したいカスの嘘とは以下のようなものです。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;雀が電線で感電しないのは、みんなで乗ることでダメージを分散しているからなんだよ&lt;/li&gt;
+&lt;li&gt;地球儀は風水で最強なので、どこにいくつ置いてもいいんだよ&lt;/li&gt;
+&lt;li&gt;一度開封したみりんを常温で保管すると、違法なんだって&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;これらのカスの嘘の特徴をまとめてみると、&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;一見して分かるようなあからさまな嘘ではないこと&lt;/li&gt;
+&lt;li&gt;科学・文化・法律に依拠したうそであること&lt;/li&gt;
+&lt;li&gt;「〇〇、〇〇」のフォーマットに従っており、20文字から40文字程度であること&lt;/li&gt;
+&lt;li&gt;落ち着いた穏やかな口調であること&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;であることが分かります。&lt;/p&gt;
+&lt;h2&gt;DSPyを使用した最適化&lt;/h2&gt;
+&lt;p&gt;手作業でのプロンプトの最適化では、上記に挙げた特徴に沿った出力を行うようにプロンプトを手作業で最適化する必要があります。&lt;/p&gt;
+&lt;p&gt;DSPyでは代わりに生成AIを使用した処理をシグネチャとモジュールとして定義し、用意したデータセットと評価関数をを用いてスコアが高くなるようにプロンプトの最適化を行います。&lt;/p&gt;
+&lt;p&gt;今回使用する&lt;a href=&quot;https://arxiv.org/abs/2507.19457&quot;&gt;GEPA&lt;/a&gt;では評価関数のメトリックだけでなく、評価関数が返すフィードバックテキストを元にプログラムの最適化を行います。&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2025/12-21-dspy-kasu-no-uso/%E5%85%A8%E4%BD%93%E6%A7%8B%E6%88%90%E5%9B%B3.png&quot; alt=&quot;全体構成図&quot;&gt;&lt;/p&gt;
+&lt;h2&gt;カスの嘘を吐くDSPyプログラム&lt;/h2&gt;
+&lt;p&gt;今回は以下のようなシグネチャとモジュールを定義します。
+キーワードからカスを嘘を出力するとても単純なものです。&lt;/p&gt;
+&lt;p&gt;また、DSPyではコメントドキュメントをプロンプトとして使用するのですが、自動プロンプト最適化を使用する場合は非常に非常にざっくりとしたものでもいい感じに最適化してくれます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-python&quot;&gt;class LieGenerate(dspy.Signature):
+    &amp;quot;&amp;quot;&amp;quot;与えられたキーワードからカスの嘘を生成します&amp;quot;&amp;quot;&amp;quot;
+
+    keyword: str = dspy.InputField(desc=&amp;quot;キーワード&amp;quot;)
+    lie: str = dspy.OutputField(desc=&amp;quot;生成されたカスの嘘&amp;quot;)
+
+
+class GenerateLie(dspy.Module):
+    def __init__(self):
+        super().__init__()
+        self.extractor = dspy.ChainOfThought(LieGenerate)
+
+    def forward(self, keyword):
+        return self.extractor(keyword=keyword)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;評価関数&lt;/h2&gt;
+&lt;p&gt;今回はカスの嘘を上記の観点で判定させるため、LLM as Judgeで評価を行います。&lt;/p&gt;
+&lt;p&gt;生成AIは放っておくとファンタジーな嘘をつき始めるので、ファンタジー要素はあからさまなSF要素は減点するように評価をさせています。&lt;/p&gt;
+&lt;p&gt;この評価用のプロンプトはある程度試行錯誤しないといけないんですよね・・・&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-python&quot;&gt;def create_lie_metric(reflection_lm: dspy.LM):
+    class StyleEvaluation(dspy.Signature):
+        &amp;quot;&amp;quot;&amp;quot;応答のスタイルを評価&amp;quot;&amp;quot;&amp;quot;
+
+        response = dspy.InputField(desc=&amp;quot;評価対象の応答&amp;quot;)
+        criteria = dspy.InputField(desc=&amp;quot;評価基準&amp;quot;)
+        score = dspy.OutputField(desc=&amp;quot;スコア（0-20）&amp;quot;, format=int)
+        explanation = dspy.OutputField(desc=&amp;quot;詳細な項目毎のスコアとその理由&amp;quot;)
+
+    evaluator = dspy.ChainOfThought(StyleEvaluation)
+
+    def lie_metric(gold, pred, trace=None, pred_name=None, pred_trace=None):
+        criteria = &amp;quot;&amp;quot;&amp;quot;
+        以下の基準で0-20点で評価してください:
+        1. キーワードに沿った嘘となっているか（2点）
+        2. 20-60文字で、「〇〇は、〇〇」や「〇〇はね、〇〇」という形式となっているか（2点）
+        3. あからさまな嘘ではなく、一見すると嘘とわからないようなもっともらしい嘘となっているか（6点）
+            - 魔法やドラゴン・妖精といった空想的存在に基づいた嘘ではないか
+            - 宇宙人や火星といった存在が確認されていないものや現在の科学水準で達成できない事柄を含んでいないか
+            - 食品が必修科目として学ばれるなど、キーワードと嘘の内容が乖離していないか
+            - 存在しない税が免除されるといった一つの文の中に複数の嘘が入っている場合は減点
+        4. 余計な解説や文が入っておらず、嘘のみの出力となっているか（2点）
+        5. 語頭に「ね、知ってる？」や「実は」を適切に使っているか（2点）
+        6. 語尾に「（な）んだよ」や「（な）んだって」、「らしいよ」を自然に接続して適切に使っているか（2点）
+        7. 日本語として自然で読みやすいか（2点）
+        8. 穏やかで落ち着いた口調か（2点）
+        &amp;quot;&amp;quot;&amp;quot;
+        with dspy.context(lm=reflection_lm):
+            eval_result = evaluator(response=pred.lie, criteria=criteria)
+            score = min(20, max(0, float(eval_result.score))) / 20.0
+            explanation = eval_result.explanation
+            return dspy.Prediction(score=score, feedback=explanation)
+
+    return lie_metric
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;最適化&lt;/h2&gt;
+&lt;p&gt;今回はリフレクションLLMに&lt;code&gt;claude-sonnet-4-5-20250929&lt;/code&gt;を使用し、タスクを実行するためのLLMとして以下のモデルを使って評価をします。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;claude-haiku-4-5-20251001&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;gpt-oss-120b&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;gpt-oss-20b&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;本当は Claude Opus 4.5 を使いたかったのですが、トレーニングを1回通しで実行するだけで50ドルくらい消費しそうになったためビビッて Sonnet に変えたという経緯があります。&lt;/p&gt;
+&lt;p&gt;学習1回あたり2時間30分程度、コストとしては10ドル程度掛かっていました。&lt;/p&gt;
+&lt;h2&gt;生成出来るカスの嘘&lt;/h2&gt;
+&lt;p&gt;各モデルがつく嘘は以下のような感じです。&lt;/p&gt;
+&lt;p&gt;gpt-ossはやたら江戸時代の話題をしたがりますが、全体的にそれっぽい嘘をつけているのではないでしょうか。&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;symbol&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;keyword&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;lie&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;gpt-oss-120b&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;おみくじ&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;実は、おみくじは江戸時代に寺の守護神が結果を予測したんだって&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;gpt-oss-20b&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;おみくじ&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;おみくじは、実は江戸時代に寺院で神の預言として引かれたものらしいよ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;haiku-4-5&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;おみくじ&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;実は、おみくじは元々、神社の祭りの日に参加者の役割を決めるためのくじだったんだって&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;gpt-oss-120b&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;お餅&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;実は、お餅は江戸時代に、米ではなく大麦の粉を蒸して作っていたらしいよ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;gpt-oss-20b&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;お餅&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;お餅は、実は江戸時代の神社で祭祀用の供え物として使われていたんだよ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;haiku-4-5&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;お餅&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;実は、お餅は昔、神社の儀式で使う供え物として作られたのが始まりで、食べ物として広まったのは江戸時代らしいよ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;gpt-oss-120b&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;ちくわ&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;ちくわは実は江戸時代に、魚のすり身ではなく、山形県の里山で取れた大根の根を乾燥させたものらしいよ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;gpt-oss-20b&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;ちくわ&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;ちくわは、実は平安時代の貴族が魚の内臓を使い、皮を巻いて焼いたお菓子らしいよ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;haiku-4-5&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;ちくわ&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;実は、ちくわは昔、竹の筒に詰めて蒸すことから『竹輪』という名前がついたんだって&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;gpt-oss-120b&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;チョコレート&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;チョコレートは実は19世紀末のスイスで、当初はカカオ豆の発酵を防ぐための保存料として開発されたらしいよ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;gpt-oss-20b&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;チョコレート&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;チョコレートは、実は16世紀にスペインの商人が日本に持ち込んだ貴族用甘味料として使われていたんだよ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;haiku-4-5&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;チョコレート&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;実は、チョコレートは昔、王族の儀式用の飲料として神聖視されていたんだって&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;gpt-oss-120b&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;懐中電灯&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;懐中電灯は実は、第一次世界大戦時にドイツ軍が潜水艦用に赤外線光源を内蔵していたらしいよ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;gpt-oss-20b&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;懐中電灯&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;懐中電灯は、実は江戸時代に武士が夜の暗闇で作戦指示を確認するために携帯した小型の灯りで、取手に銀の刻印が付いていたんだよ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;haiku-4-5&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;懐中電灯&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;実は、懐中電灯は元々、鉱山での作業中に両手を自由にするために懐に入れて使う照明として開発されたんだって&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;gpt-oss-120b&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;乾電池&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;実は、乾電池はかつて日本の昭和30年代に、アルカリ電解質ではなく銀酸化物が主成分だったらしいよ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;gpt-oss-20b&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;乾電池&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;乾電池は、実は地下鉄の電力供給に使われていたと、当時の軍部秘書が記録していたんだよ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;haiku-4-5&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;乾電池&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;実は、乾電池は元々、懐中電灯ではなく、医療用の刺激装置として開発されたんだって&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;gpt-oss-120b&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;軽トラ&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;実は、軽トラは昭和60年代に農業用から貨物輸送専用に改良されたんだって&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;gpt-oss-20b&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;軽トラ&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;軽トラは、実は昭和30年代に発明された、山間部の農家が手作りで改造した小型自動車の原型だって&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;haiku-4-5&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;軽トラ&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;実は、軽トラは元々、郵便配達員が使うために開発された専用車両なんだって&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;gpt-oss-120b&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;初詣&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;実は、初詣は江戸時代に商人が売り上げを祈願するために始めたらしいよ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;gpt-oss-20b&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;初詣&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;初詣は、実は江戸時代から新年のご飯をお供えすると、その年の収穫が倍増すると信じられていたらしいよ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;haiku-4-5&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;初詣&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;実は、初詣は江戸時代に商人たちが商売繁盛を祈るために始めた習慣なんだって&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;gpt-oss-120b&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;生成AI&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;生成AIは実は1970年代に日本の研究所で、音声合成だけでなく感情推定までできると宣伝されたらしいよ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;gpt-oss-20b&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;生成AI&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;生成AIは、実は19世紀末のドイツ工学者がパターン生成装置として開発したらしいよ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;haiku-4-5&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;生成AI&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;実は、生成AIって、元々は人間の脳の神経回路を模倣するために開発された技術なんだって&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;gpt-oss-120b&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;東京タワー&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;実は、東京タワーは当初、通信塔ではなく観測用の気象観測所として建てられたらしいよ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;gpt-oss-20b&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;東京タワー&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;東京タワーは、実は昭和初期に東京郊外の灯台の設計図を活用して作られたらしいよ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;haiku-4-5&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;東京タワー&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;実は、東京タワーは元々、戦後の電波障害を調査するための実験施設だったんだって&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2&gt;クロス評価&lt;/h2&gt;
+&lt;p&gt;それぞれのモデルに最適なプロンプトが求められたので、プロンプトをそれぞれモデルに適用してスコアがどのようになるか評価してみました。&lt;/p&gt;
+&lt;p&gt;どのモデルでもモデルに最適化されたプロンプトを使用したときが最も高いスコアを出していることが分かります。
+また、gpt-oss-20bのようにパラメータ数が小さいモデルでは最適なプロンプトとそれ以外のプロンプトでのスコアの差が大きくなることが分かります。&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2025/12-21-dspy-kasu-no-uso/cross-eval.png&quot; alt=&quot;クロス評価結果&quot;&gt;&lt;/p&gt;
+&lt;h2&gt;一通り試してみての感想&lt;/h2&gt;
+&lt;p&gt;ここからは一通り試してみての感想です。&lt;/p&gt;
+&lt;h3&gt;学習データの準備が一番大変&lt;/h3&gt;
+&lt;p&gt;この辺はよく言われると思います。
+今回はしょうもない嘘をつかせるという非常に単純なタスクだったので、学習データは30程度でも割と何とかなってます。
+ですが、業務レベルの複雑さの場合、とにかく学習データを用意するのがとても大変になると思います。&lt;/p&gt;
+&lt;h3&gt;評価関数のチューニングが大事&lt;/h3&gt;
+&lt;p&gt;今回のタスクはキーワードから嘘をつくという、創作的なタスクを行わせています。
+そのため、与えられた入力からどれだけ期待する出力化という観点では評価がしづらく、LLM as Judgeで評価をさせています。&lt;/p&gt;
+&lt;p&gt;評価関数で自分が欲しい嘘に対して高いスコアを返せるよういかに嘘の条件を言語化してLLM as Judgeで評価するのが大事でした。&lt;/p&gt;
+&lt;h3&gt;APIの使用料金もそれなりに掛かる&lt;/h3&gt;
+&lt;p&gt;GEPAはフィードバックを基にプロンプトを最適化しますが、そのプロンプトの最適化には出来るだけ高性能なLLMを使ったほうがいいらしいです。&lt;/p&gt;
+&lt;p&gt;そんな高性能なLLMをすごい勢いで呼び出すので、当然APIの使用料金も高くなります。
+かといってプロンプトの最適化に安価なモデルを使用すると明らかにカスの嘘のクオリティも下がるので、この辺はクオリティと費用のバランスをうまくとる必要がありそうです。&lt;/p&gt;
+&lt;h3&gt;試行錯誤が無くなるわけではない&lt;/h3&gt;
+&lt;p&gt;LLM as Judgeを使う以上、ジャッジをさせるプロンプトそのものの最適化は人間がやらなくてはいけません。
+今回の例ですと、LLMはやたらとファンタジーな嘘をつきたがるので、それをいかにフィードバックで消すかというところに労力がかかっています。&lt;/p&gt;
+&lt;p&gt;LLM as Judge自体をMIPROなりGEPAなりで最適化する手法もありますが、その辺の評価をどうするかや学習データの整備にも手間と時間が掛かるので、試行錯誤自体を消せるわけではないのかなという気がしています。&lt;/p&gt;
+&lt;h2&gt;おわりに&lt;/h2&gt;
+&lt;p&gt;生成AIにしょうもない嘘をつかせるのも安くはないですね・・・&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2025/12-21-dspy-kasu-no-uso/%E3%82%B3%E3%82%B9%E3%83%88.png&quot; alt=&quot;カスの嘘をつかせるために28ドル掛かりました&quot;&gt;&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/jyuch/dspy-kasu-no-uso&quot;&gt;jyuch / dspy-kasu-no-uso&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;
+&lt;h2&gt;参考資料&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/mahm/dspy-demo&quot;&gt;mahm / dspy-demo&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://speakerdeck.com/masahiro_nishimi/dspy-meetup-tokyo-number-1-hazimetenodspy&quot;&gt;はじめてのDSPy - 株式会社ジェネラティブエージェント 西見公宏&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;</content>
+	</entry>
+	<entry>
+		<title>DSPyを使用してLLMを使ったレシートの読み取り精度を向上させたい</title>
+		<link href="https://www.jyuch.dev/posts/2025/10-26-improve-precision-using-dspy/"/>
+		<updated>2025-10-26T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/10-26-improve-precision-using-dspy/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;簡単な家計簿をつけているのですが、レシートの内容を確認して転記するのがめんどくさいなと感じていました。&lt;/p&gt;
+&lt;p&gt;そこで、LLMを使って情報を抽出できないかなと考えていたのですが、せっかくなら&lt;a href=&quot;https://dspy.ai/&quot;&gt;DSPy&lt;/a&gt;を使って構造化出力するのと、プロンプト最適化を行ってみたいなということで試してみました。&lt;/p&gt;
+&lt;h2&gt;シグネチャの準備&lt;/h2&gt;
+&lt;p&gt;DSPyでは入力値と出力値をコードとして表現します。
+ここではレシート画像から購入日と合計金額を抽出することにします。&lt;/p&gt;
+&lt;p&gt;入力値と出力値はシグネチャとして表現され、&lt;code&gt;dspy.Signature&lt;/code&gt;のサブクラスとして実装します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-python&quot;&gt;from datetime import date
+
+import dspy
+
+
+class ExtractReceiptInfo(dspy.Signature):
+    &amp;quot;&amp;quot;&amp;quot;Extract total amount from receipt image.&amp;quot;&amp;quot;&amp;quot;
+
+    image: dspy.Image = dspy.InputField(desc=&amp;quot;Receipt image.&amp;quot;)
+    purchase_date: date = dspy.OutputField(desc=&amp;quot;Purchase date of payment.&amp;quot;)
+    total_amount: int = dspy.OutputField(desc=&amp;quot;Total amount of payment.&amp;quot;)
+
+
+class ReceiptExtractor(dspy.Module):
+    def __init__(self):
+        super().__init__()
+        self.extractor = dspy.ChainOfThought(ExtractReceiptInfo)
+
+    def forward(self, image):
+        return self.extractor(image=image)
+
+
+def extraction_metric(gold, pred, trace=None):
+    metric = 0
+
+    if gold.total_amount == pred.total_amount:
+        metric += 1
+    if gold.purchase_date == pred.purchase_date:
+        metric += 1
+
+    if trace is None:
+        return metric / 2.0
+    else:
+        return metric == 2
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;学習データの準備&lt;/h2&gt;
+&lt;p&gt;DSPyでは教師データを使用して入力データから期待する出力をするようにプロンプトを最適化します。&lt;/p&gt;
+&lt;p&gt;そのため、最初にある程度のレシート画像と、その画像からどのような結果を出力してほしいかの期待値をひたすら列挙する必要があります。&lt;/p&gt;
+&lt;p&gt;ここでは、以下のような教師データを家中のあるだけのレシートを使って作成します。
+スキャナでレシートを読み込み、エクセルでレシート画像と期待値の組み合わせをひたすら入力します。&lt;/p&gt;
+&lt;p&gt;このデータそのまま家計簿に突っ込めばよくね？とか考えてはいけません。&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;image&lt;/th&gt;
+&lt;th style=&quot;text-align:right&quot;&gt;purchase_date&lt;/th&gt;
+&lt;th style=&quot;text-align:right&quot;&gt;total_amount&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;20251019_000.jpg&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;2025-08-28&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;162&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;20251019_001.jpg&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;2025-08-19&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;170&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;20251019_002.jpg&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;2025-09-09&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;162&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;...&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;...&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;...&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2&gt;LM Studioの準備&lt;/h2&gt;
+&lt;p&gt;タスクを実行するLLMはLM Studioを使ってローカルで実行するので、LM Studioをインストールしておきます。
+モデルはGemma 3を使います。&lt;/p&gt;
+&lt;h2&gt;Databricks Free Editionの準備&lt;/h2&gt;
+&lt;p&gt;MIPROv2では教師として高性能なLLMを使用するのですが、ここではDatabricksでホストされているLlama 4 Maverickを利用します。&lt;/p&gt;
+&lt;p&gt;Databricks Free Editionではレートリミットなどの制限はありますが、無償で使わせてくれるのでありがたく使います。Databricksさんはなんて太っ腹なんでしょう！（ステマその１）&lt;/p&gt;
+&lt;p&gt;Settings → User → Developer → Access tokensからトークンを発行しておきます。
+また、MLFlowも使いたいので、併せてExperimentsも作成しておきます。
+Experimentsを作成すると、外部からExperimentsを使うにはみたいな画面が表示されるので、表示された環境変数をコピーしておきます。&lt;/p&gt;
+&lt;p&gt;最終的に以下の環境変数を登録します。&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;環境変数&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;例&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;DATABRICKS_API_BASE&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;https://dbc-12345678-abcd.cloud.databricks.com/serving-endpoints&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;DATABRICKS_API_KEY&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Databricksのシークレット&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;DATABRICKS_HOST&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;https://dbc-12345678-abcd.cloud.databricks.com&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;DATABRICKS_TOKEN&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Databricksのシークレット&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;MLFLOW_EXPERIMENT_ID&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;123456789012345&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;MLFLOW_REGISTRY_URI&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;databricks-uc&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;MLFLOW_TRACKING_URI&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;databricks&lt;/code&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;&lt;code&gt;DATABRICKS_API_BASE&lt;/code&gt;と&lt;code&gt;DATABRICKS_API_KEY&lt;/code&gt;はDatabricksのServing endpointsにアクセスする用で、それ以外はMLFlowにメトリックを送る用です。&lt;/p&gt;
+&lt;h2&gt;トレーニング&lt;/h2&gt;
+&lt;p&gt;必要なものがそろったらいよいよプロンプト最適化を実行します。
+ここではとりあえずMIPROv2を使っていきます。&lt;/p&gt;
+&lt;p&gt;余談ですが、DSPyはLLMにアクセスするために&lt;a href=&quot;https://www.litellm.ai/&quot;&gt;LiteLLM&lt;/a&gt;というライブラリを使用しているようです。&lt;/p&gt;
+&lt;p&gt;LiteLLMではプレフィックスでどのプロバイダーのAPI形式（OpenAI互換やAnthropic互換など）を判断しているようです。
+また、LM StudioはOpenAI互換です。&lt;/p&gt;
+&lt;p&gt;そのため、OpenAI互換としてAPIを叩いてほしいのですが、&lt;code&gt;openai/google/gemma-3-12b&lt;/code&gt;とかいう各方面から怒られそうなモデル名で指定をしないといけません。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-python&quot;&gt;import csv
+import os
+from datetime import datetime
+from typing import List
+
+import dspy
+import mlflow
+
+from program import ReceiptExtractor, extraction_metric
+
+LMSTUDIO_API_BASE = os.environ[&amp;quot;LMSTUDIO_API_BASE&amp;quot;]
+
+teacher_llm = dspy.LM(
+    &amp;quot;databricks/databricks-llama-4-maverick&amp;quot;,
+    temperature=1.0,
+)
+
+student_llm = dspy.LM(
+    &amp;quot;openai/google/gemma-3-12b&amp;quot;,
+    api_base=LMSTUDIO_API_BASE,
+    api_key=&amp;quot;dummy&amp;quot;,
+)
+
+
+def run_prompt_optimizer(train_examples: List[dspy.Example]):
+    student_program = ReceiptExtractor()
+    optimizer = dspy.MIPROv2(
+        metric=extraction_metric, prompt_model=teacher_llm, task_model=student_llm
+    )
+    compiled_program = optimizer.compile(student_program, trainset=train_examples)
+    compiled_program.save(&amp;quot;./program.json&amp;quot;, save_program=False)
+
+
+def main():
+    mlflow.dspy.autolog(
+        log_compiles=True,
+        log_evals=True,
+        log_traces_from_compile=True,
+    )
+
+    dspy.configure(lm=student_llm)
+
+    train_examples: List[dspy.Example]
+    with open(&amp;quot;./dataset/training.csv&amp;quot;, encoding=&amp;quot;utf_8&amp;quot;) as f:
+        reader = csv.DictReader(f)
+        train_examples = [
+            dspy.Example(
+                image=dspy.Image.from_file(f&amp;quot;./dataset/{row[&#39;image&#39;]}&amp;quot;),
+                purchase_date=datetime.strptime(
+                    row[&amp;quot;purchase_date&amp;quot;], &amp;quot;%Y-%m-%d&amp;quot;
+                ).date(),
+                total_amount=int(row[&amp;quot;total_amount&amp;quot;]),
+            ).with_inputs(&amp;quot;image&amp;quot;)
+            for row in reader
+        ]
+
+    run_prompt_optimizer(train_examples)
+
+
+if __name__ == &amp;quot;__main__&amp;quot;:
+    main()
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;評価&lt;/h2&gt;
+&lt;p&gt;学習が終わったら、とりあえずどのくらい違うのか評価してみましょう。&lt;/p&gt;
+&lt;p&gt;ここでは、学習前と学習後、LLMのモデル、パラメータ数を変えてどのくらい差があるのかを確認しています。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-python&quot;&gt;import csv
+import os
+from datetime import datetime
+from typing import List
+
+import dspy
+from dspy.evaluate.evaluate import Evaluate
+
+from program import ReceiptExtractor, extraction_metric
+
+LMSTUDIO_API_BASE = os.environ[&amp;quot;LMSTUDIO_API_BASE&amp;quot;]
+
+gemma_3_12b = dspy.LM(
+    &amp;quot;openai/google/gemma-3-12b&amp;quot;,
+    api_base=LMSTUDIO_API_BASE,
+    api_key=&amp;quot;dummy&amp;quot;,
+)
+
+gemma_3_27b = dspy.LM(
+    &amp;quot;openai/google/gemma-3-27b&amp;quot;,
+    api_base=LMSTUDIO_API_BASE,
+    api_key=&amp;quot;dummy&amp;quot;,
+)
+
+llama_4_maverick = dspy.LM(
+    &amp;quot;databricks/databricks-llama-4-maverick&amp;quot;,
+)
+
+
+def main():
+    dspy.configure(lm=gemma_3_12b)
+    original = ReceiptExtractor()
+    trained = ReceiptExtractor()
+    trained.load(&amp;quot;./program.json&amp;quot;)
+
+    train_examples: List[dspy.Example]
+    with open(&amp;quot;./dataset/training.csv&amp;quot;, encoding=&amp;quot;utf_8&amp;quot;) as f:
+        reader = csv.DictReader(f)
+        train_examples = [
+            dspy.Example(
+                image=dspy.Image.from_file(f&amp;quot;./dataset/{row[&#39;image&#39;]}&amp;quot;),
+                purchase_date=datetime.strptime(
+                    row[&amp;quot;purchase_date&amp;quot;], &amp;quot;%Y-%m-%d&amp;quot;
+                ).date(),
+                total_amount=int(row[&amp;quot;total_amount&amp;quot;]),
+            ).with_inputs(&amp;quot;image&amp;quot;)
+            for row in reader
+        ]
+
+    evaluate = Evaluate(
+        devset=train_examples, num_threads=1, display_progress=True, display_table=0
+    )
+
+    with dspy.context(lm=gemma_3_12b):
+        evaluate(original, metric=extraction_metric)
+        evaluate(trained, metric=extraction_metric)
+
+    with dspy.context(lm=gemma_3_27b):
+        evaluate(original, metric=extraction_metric)
+        evaluate(trained, metric=extraction_metric)
+
+    with dspy.context(lm=llama_4_maverick):
+        evaluate(original, metric=extraction_metric)
+        evaluate(trained, metric=extraction_metric)
+
+
+if __name__ == &amp;quot;__main__&amp;quot;:
+    main()
+&lt;/code&gt;&lt;/pre&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;モデル&lt;/th&gt;
+&lt;th style=&quot;text-align:right&quot;&gt;最適化前&lt;/th&gt;
+&lt;th style=&quot;text-align:right&quot;&gt;最適化後&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;google/gemma-3-12&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;84.0%&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;96.2%&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;google/gemma-3-27b&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;80.2%&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;97.2%&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;databricks-llama-4-maverick&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;100.0%&lt;/td&gt;
+&lt;td style=&quot;text-align:right&quot;&gt;100.0%&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;あー、うん、まぁ、ねぇ。&lt;/p&gt;
+&lt;h2&gt;おわりに&lt;/h2&gt;
+&lt;p&gt;プロンプト最適化の部分については確かに最適化すれば性能は上がりましたが、最初から高性能なモデルを使えばそりゃ精度は高いよねというのを如実に見せつけられました。&lt;/p&gt;
+&lt;p&gt;ですが、個人的には構造化出力をコードとして表現できるのはうれしみがありますね。
+プロンプトにJSON Schemaをくっつけて、出力をJSONパーサに食わせて正常にパース出来るのを祈るという作業から解放されるだけでもDSPyを使ううれしみがあると思います。&lt;/p&gt;
+&lt;p&gt;教師データだけ用意しておけば、他のLLMが出てきたときは最適化と検証のループを回して、今までよりも成績が良ければ入れ替えるというサイクルをほぼ自動で回せます。&lt;/p&gt;
+&lt;p&gt;ギョームでLLMを使う場合はこの辺のサイクルを回せるようにしておくと後々のつらみポイントを軽減出来ると思うので、みなさんDatabricksと合わせて使ってみてはいかがでしょうか。（ステマその２）&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/jyuch/extract-receipt/tree/master&quot;&gt;jyuch / extract-receipt&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>PostgreSQL 18 の uuidv7 関数は単調性が保証されているから安心だねってお話</title>
+		<link href="https://www.jyuch.dev/posts/2025/10-12-pg18-uuidv7-is-monotonically-increasing/"/>
+		<updated>2025-10-12T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/10-12-pg18-uuidv7-is-monotonically-increasing/</id>
+		<content type="html">&lt;h2&gt;長いので先にまとめ&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;UUIDv7は&lt;a href=&quot;https://datatracker.ietf.org/doc/html/rfc9562&quot;&gt;RFC9562&lt;/a&gt;上ではミリ秒精度のタイムスタンプを持つことを要求している&lt;/li&gt;
+&lt;li&gt;また、オプショナルとして&lt;code&gt;rand_a&lt;/code&gt;及び&lt;code&gt;rand_b&lt;/code&gt;の生成方法を工夫して単調増加を保証しても良いとされている&lt;/li&gt;
+&lt;li&gt;PostgreSQL 18 の&lt;code&gt;uuidv7()&lt;/code&gt;関数はRFC9562のSection 6.2 Method 3で提案されているタイムスタンプをサブミリ秒まで拡張する方法で単調増加を保証している
+&lt;ul&gt;
+&lt;li&gt;サブミリ秒レベルでタイムスタンプが衝突した場合は、最小精度でインクリメントすることでタイムスタンプの衝突を回避している&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;最近リリースされたPostgreSQL 18 で UUIDv7 の生成がサポートされました。&lt;/p&gt;
+&lt;p&gt;個人的にはUUIDが生成順にソート可能になるうれしさがよく分からないのですが、いざ使うことになった際に困らないように調べてみることにしました。&lt;/p&gt;
+&lt;h2&gt;UUIDv7&lt;/h2&gt;
+&lt;p&gt;そもそも、UUIDv7はどのような構造をしているのでしょうか。&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://datatracker.ietf.org/doc/html/rfc9562#name-uuid-version-7&quot;&gt;5.7. UUID Version 7&lt;/a&gt;からビットレイアウトを引用して確認してみましょう。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-txt&quot;&gt;    0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                           unix_ts_ms                          |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |          unix_ts_ms           |  ver  |       rand_a          |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |var|                        rand_b                             |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                            rand_b                             |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+                   Figure 11: UUIDv7 Field and Bit Layout
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;バージョン（&lt;code&gt;ver&lt;/code&gt;）とバリアント（&lt;code&gt;var&lt;/code&gt;）を除くと、以下の要素から構成されていることが分かります。&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;フィールド&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;説明&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;unix_ts_ms&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;48ビットで表現されたミリ秒精度のUnixエポックタイムスタンプ&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;rand_a&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;12ビットのランダムフィールド&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;&lt;code&gt;rand_b&lt;/code&gt;&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;62ビットのランダムフィールド&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;RFCが最低限求めている仕様では、タイムスタンプはミリ秒精度となっています。
+そのため、同一ミリ秒内で複数回UUIDが生成された場合、生成された順序の並べ替えを保証出来なくなってしまいます。&lt;/p&gt;
+&lt;p&gt;そのため、&lt;a href=&quot;https://datatracker.ietf.org/doc/html/rfc9562#name-monotonicity-and-counters&quot;&gt;6.2. Monotonicity and Counters&lt;/a&gt;では、高頻度でのUUIID生成環境下での単調増加性を保証するための方法が提案されています。&lt;/p&gt;
+&lt;h2&gt;PostgreSQL 18 の UUIDv7&lt;/h2&gt;
+&lt;p&gt;PostgreSQL 18 の&lt;code&gt;uuidv7()&lt;/code&gt;関数はミリ秒タイムスタンプ + サブミリ秒タイムスタンプ + ランダム値で計算されていることが&lt;a href=&quot;https://www.postgresql.org/docs/18/functions-uuid.html#FUNC_UUID_GEN_TABLE&quot;&gt;ドキュメントに記載されています。&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;具体的には&lt;code&gt;uuid.c&lt;/code&gt;の以下の&lt;code&gt;generate_uuidv7()&lt;/code&gt;関数で実装されています。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-c&quot;&gt;/*
+ * Generate UUID version 7 per RFC 9562, with the given timestamp.
+ *
+ * UUID version 7 consists of a Unix timestamp in milliseconds (48 bits) and
+ * 74 random bits, excluding the required version and variant bits. To ensure
+ * monotonicity in scenarios of high-frequency UUID generation, we employ the
+ * method &amp;quot;Replace Leftmost Random Bits with Increased Clock Precision (Method 3)&amp;quot;,
+ * described in the RFC. This method utilizes 12 bits from the &amp;quot;rand_a&amp;quot; bits
+ * to store a 1/4096 (or 2^12) fraction of sub-millisecond precision.
+ *
+ * unix_ts_ms is a number of milliseconds since start of the UNIX epoch,
+ * and sub_ms is a number of nanoseconds within millisecond. These values are
+ * used for time-dependent bits of UUID.
+ *
+ * NB: all numbers here are unsigned, unix_ts_ms cannot be negative per RFC.
+ */
+static pg_uuid_t *
+generate_uuidv7(uint64 unix_ts_ms, uint32 sub_ms)
+{
+	pg_uuid_t  *uuid = palloc(UUID_LEN);
+	uint32		increased_clock_precision;
+
+	/* Fill in time part */
+	uuid-&amp;gt;data[0] = (unsigned char) (unix_ts_ms &amp;gt;&amp;gt; 40);
+	uuid-&amp;gt;data[1] = (unsigned char) (unix_ts_ms &amp;gt;&amp;gt; 32);
+	uuid-&amp;gt;data[2] = (unsigned char) (unix_ts_ms &amp;gt;&amp;gt; 24);
+	uuid-&amp;gt;data[3] = (unsigned char) (unix_ts_ms &amp;gt;&amp;gt; 16);
+	uuid-&amp;gt;data[4] = (unsigned char) (unix_ts_ms &amp;gt;&amp;gt; 8);
+	uuid-&amp;gt;data[5] = (unsigned char) unix_ts_ms;
+
+	/*
+	 * sub-millisecond timestamp fraction (SUBMS_BITS bits, not
+	 * SUBMS_MINIMAL_STEP_BITS)
+	 */
+	increased_clock_precision = (sub_ms * (1 &amp;lt;&amp;lt; SUBMS_BITS)) / NS_PER_MS;
+
+	/* Fill the increased clock precision to &amp;quot;rand_a&amp;quot; bits */
+	uuid-&amp;gt;data[6] = (unsigned char) (increased_clock_precision &amp;gt;&amp;gt; 8);
+	uuid-&amp;gt;data[7] = (unsigned char) (increased_clock_precision);
+
+	/* fill everything after the increased clock precision with random bytes */
+	if (!pg_strong_random(&amp;amp;uuid-&amp;gt;data[8], UUID_LEN - 8))
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg(&amp;quot;could not generate random values&amp;quot;)));
+
+#if SUBMS_MINIMAL_STEP_BITS == 10
+
+	/*
+	 * On systems that have only 10 bits of sub-ms precision,  2 least
+	 * significant are dependent on other time-specific bits, and they do not
+	 * contribute to uniqueness. To make these bit random we mix in two bits
+	 * from CSPRNG. SUBMS_MINIMAL_STEP is chosen so that we still guarantee
+	 * monotonicity despite altering these bits.
+	 */
+	uuid-&amp;gt;data[7] = uuid-&amp;gt;data[7] ^ (uuid-&amp;gt;data[8] &amp;gt;&amp;gt; 6);
+#endif
+
+	/*
+	 * Set magic numbers for a &amp;quot;version 7&amp;quot; (pseudorandom) UUID and variant,
+	 * see https://www.rfc-editor.org/rfc/rfc9562#name-version-field
+	 */
+	uuid_set_version(uuid, 7);
+
+	return uuid;
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;詳しくは実装を読んでもらえればと思いますが、&lt;code&gt;rand_a&lt;/code&gt;フィールドの12bitにナノ秒（Linux）を埋め込むか、マイクロ秒 + ランダム値（Windows・mac）を埋め込んでいます。&lt;/p&gt;
+&lt;p&gt;また、現在時刻を供給している&lt;code&gt;get_real_time_ns_ascending()&lt;/code&gt;関数内で、前回との時刻の差分が&lt;code&gt;rand_a&lt;/code&gt;フィールドに埋め込むタイムスタンプの精度以下の場合は、最小精度（Linuxの場合は245マイクロ秒）を加算することでサブミリ秒内でタイムスタンプが衝突することを防いでいます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-c&quot;&gt;/*
+ * Get the current timestamp with nanosecond precision for UUID generation.
+ * The returned timestamp is ensured to be at least SUBMS_MINIMAL_STEP greater
+ * than the previous returned timestamp (on this backend).
+ */
+static inline int64
+get_real_time_ns_ascending()
+{
+	static int64 previous_ns = 0;
+	int64		ns;
+
+	/* Get the current real timestamp */
+
+#ifdef	_MSC_VER
+	struct timeval tmp;
+
+	gettimeofday(&amp;amp;tmp, NULL);
+	ns = tmp.tv_sec * NS_PER_S + tmp.tv_usec * NS_PER_US;
+#else
+	struct timespec tmp;
+
+	/*
+	 * We don&#39;t use gettimeofday(), instead use clock_gettime() with
+	 * CLOCK_REALTIME where available in order to get a high-precision
+	 * (nanoseconds) real timestamp.
+	 *
+	 * Note while a timestamp returned by clock_gettime() with CLOCK_REALTIME
+	 * is nanosecond-precision on most Unix-like platforms, on some platforms
+	 * such as macOS it&#39;s restricted to microsecond-precision.
+	 */
+	clock_gettime(CLOCK_REALTIME, &amp;amp;tmp);
+	ns = tmp.tv_sec * NS_PER_S + tmp.tv_nsec;
+#endif
+
+	/* Guarantee the minimal step advancement of the timestamp */
+	if (previous_ns + SUBMS_MINIMAL_STEP_NS &amp;gt;= ns)
+		ns = previous_ns + SUBMS_MINIMAL_STEP_NS;
+	previous_ns = ns;
+
+	return ns;
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;そのため、実用的かどうかと言われるとｱﾚですが、&lt;code&gt;uuidv7()&lt;/code&gt;関数で生成されたUUIDv7からサブミリ秒のタイムスタンプを抽出することが出来ます。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-rust&quot;&gt;// サブミリ秒が12ビットで供給されている環境用
+fn uuidv7_to_timestamp(uuidv7: &amp;amp;str) -&amp;gt; (i64, i64) {
+    let uuid = uuidv7.replace(&amp;quot;-&amp;quot;, &amp;quot;&amp;quot;);
+    let uuid = u128::from_str_radix(&amp;amp;*uuid, 16).unwrap();
+    let ms = (uuid &amp;gt;&amp;gt; 80) as i64;
+
+    let uuid = uuid.to_be_bytes();
+    let increased_clock_precision = (((uuid[6] &amp;amp; 0x0fu8) as i64) &amp;lt;&amp;lt; 8) | uuid[7] as i64;
+    let ns = increased_clock_precision * SUBMS_MINIMAL_STEP_NS;
+
+    (ms, ns)
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/jyuch/pg-uuidv7-to-timestamp&quot;&gt;jyuch/pg-uuidv7-to-timestamp&lt;/a&gt;&lt;/p&gt;
+&lt;h2&gt;PostgreSQL 18 でのUUIDv7生成例&lt;/h2&gt;
+&lt;p&gt;最後に実際に&lt;code&gt;uuidv7()&lt;/code&gt;関数を使ってUUIDv7を生成して、単調増加しているかを確認してみましょう。&lt;/p&gt;
+&lt;p&gt;以下のようなテーブルを作成したうえで、&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sql&quot;&gt;create table uuidv7_test_table
+(
+    i     int,
+    clock timestamp,
+    value uuid
+);
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;以下のクエリで全力でUUIDv7を生成します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sql&quot;&gt;begin transaction;
+do
+$do$
+  begin
+    for i in 1..1000000
+      loop
+        insert into uuidv7_test_table(i, clock, value) 
+        values (i, clock_timestamp(), uuidv7());
+      end loop;
+    end
+$do$;
+end;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;すると、以下のような結果となります。
+上記の&lt;code&gt;uuidv7_to_timestamp()&lt;/code&gt;の結果を併記しています。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sql&quot;&gt;select i, value, uuid_extract_timestamp(value), clock
+from uuidv7_test_table
+order by value;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;i&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;value&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;uuid_extract_timestamp&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;clock&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;uuidv7_to_timestamp&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;1&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;0199d67d-81a7-713d-aed5-6bbd22a476c2&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479000 +00:00&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479071&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479 UTC 77665&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;0199d67d-81a7-7be4-ba18-b1d95ac5835f&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479000 +00:00&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479741&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479 UTC 745780&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;3&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;0199d67d-81a7-7c31-9ca1-df81b59c2e69&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479000 +00:00&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479762&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479 UTC 764645&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;4&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;0199d67d-81a7-7c45-b183-8ebf38326e24&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479000 +00:00&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479766&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479 UTC 769545&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;5&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;0199d67d-81a7-7c55-893a-c1685851f5f7&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479000 +00:00&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479770&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;2025-10-12 03:36:13.479 UTC 773465&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;&lt;code&gt;uuid_extract_timestamp&lt;/code&gt;関数がミリ秒までの精度しか返していませんが、仕様上はミリ秒精度があれば良いとされていることと、外部で生成されたUUIDv7でも対応できるようにこのようになっています。&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>PostgreSQL 18 をソースコードからビルドしたい</title>
+		<link href="https://www.jyuch.dev/posts/2025/10-11-build-postgresql-18/"/>
+		<updated>2025-10-11T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/10-11-build-postgresql-18/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;PostgreSQL 18 がリリースされたので、ソースコードからビルドする手順を確認してみました。&lt;/p&gt;
+&lt;p&gt;まぁ、基本的には公式リファレンスと過去の自分のブログをなぞっているだけです。&lt;/p&gt;
+&lt;p&gt;LLVMのサポートと、lz4・zstd圧縮のサポートを有効にしてビルドします。&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://www.postgresql.org/docs/18/installation.html&quot;&gt;Chapter 17. Installation from Source Code&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://www.jyuch.dev/posts/2021/build-pg-on-linux/&quot;&gt;PostgreSQLを野良ビルドしてローカルインストールしたい&lt;/a&gt;&lt;/p&gt;
+&lt;h2&gt;環境&lt;/h2&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;ソフトウェア&lt;/th&gt;
+&lt;th style=&quot;text-align:left&quot;&gt;バージョン&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;OS&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;Ubuntu 24.04.3 LTS&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;PostgreSQL&lt;/td&gt;
+&lt;td style=&quot;text-align:left&quot;&gt;18.0&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;また、ソースコードは&lt;code&gt;$HOME/src&lt;/code&gt;に展開するものとし、バイナリは&lt;code&gt;$HOME/.local/pg18.0&lt;/code&gt;にインストールするものとします。&lt;/p&gt;
+&lt;h2&gt;コンパイラ・ライブラリのインストール&lt;/h2&gt;
+&lt;p&gt;ビルドするだけなら以下のパッケージを入れるだけでOKです。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;sudo apt install &#92;
+  build-essential &#92;
+  flex &#92;
+  bison &#92;
+  libreadline-dev &#92;
+  zlib1g-dev &#92;
+  liblz4-dev &#92;
+  libzstd-dev &#92;
+  llvm-20 &#92;
+  clang-20
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;ドキュメントを含めたフルビルドが必要なら以下のパッケージも必要になります。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;sudo apt install &#92;
+  docbook-xml &#92;
+  docbook-xsl &#92;
+  libxml2-utils &#92;
+  xsltproc &#92;
+  fop
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;ソースコードのダウンロード・展開&lt;/h2&gt;
+&lt;p&gt;以下のコマンドよりソースコードをダウロード・展開します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;cd $HOME/src
+curl -OL https://ftp.postgresql.org/pub/source/v18.0/postgresql-18.0.tar.gz
+tar zxvf postgresql-18.0.tar.gz
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;ビルド・インストール&lt;/h2&gt;
+&lt;p&gt;以下のコマンドより、&lt;code&gt;configure&lt;/code&gt;を流します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;cd postgresql-18.0
+mkdir build_temp &amp;amp;&amp;amp; cd build_temp
+$HOME/src/postgresql-18.0/configure &#92;
+  --prefix=$HOME/.local/pg18.0 &#92;
+  --with-icu &#92;
+  --with-lz4 &#92;
+  --with-zstd &#92;
+  --with-llvm &#92;
+  LLVM_CONFIG=&#39;/usr/bin/llvm-config-20&#39; &#92;
+  CLANG=&#39;/usr/bin/clang-20&#39; &#92;
+  CC=&#39;/usr/bin/clang-20&#39; &#92;
+  CXX=&#39;/usr/bin/clang-20&#39;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;バイナリ系をビルドするだけなら以下のコマンドを実行します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;make world-bin
+make install-world-bin
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;ドキュメントを含めてすべてビルドするなら以下のコマンドを実行します。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-sh&quot;&gt;make world
+make install-world
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>生成AIは業務の夢を見るか</title>
+		<link href="https://www.jyuch.dev/posts/2025/09-27-do-gen-ais-dream-of-biz/"/>
+		<updated>2025-09-27T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/09-27-do-gen-ais-dream-of-biz/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;最近は猫も杓子も生成AIの話題で持ちきりです。
+ソフトウェアエンジニアリングの領域では生成AIにコードを書かせる具体的な方法論が積極的に議論されています。&lt;/p&gt;
+&lt;p&gt;対して、生成AIを実業務に載せる話となると、何とも言えない抽象論のお話がメインで、生成AIに購買業務をやらせていますという話は聞きません。&lt;/p&gt;
+&lt;p&gt;そこで、業務アプリを模したMCPを実装し、生成AIがそのMCPを介して人間の指示に従って業務を遂行できるのかを試してみました。&lt;/p&gt;
+&lt;h2&gt;実装したMCP&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/jyuch/badcompany-enterprise-mcp&quot;&gt;badcompany-enterprise-mcp&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;今回は簡略化した購買業務を遂行するためのMCPを実装しました。&lt;/p&gt;
+&lt;p&gt;MCPは以下のツールを備えており、生成AIが在庫数を取得したり発注を行えるようになっています。&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;ツール名&lt;/th&gt;
+&lt;th&gt;説明&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;query_stock&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;指定したアイテムの在庫数を取得します。&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;query_item_required&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;製造対象アイテムに必要な部品とその数量を取得します。&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;order_item&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;指定したアイテムを発注します。&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;query_pending_orders&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;発注残のリストを取得します。&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;&lt;code&gt;query_item_info&lt;/code&gt;&lt;/td&gt;
+&lt;td&gt;アイテムの基本情報（名前・種別）を取得します。&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;余談ですが、このコードは混じりっけなしの純度100%の手書きコードです。
+まぁ、MCPとか書いてみたかったし・・・&lt;/p&gt;
+&lt;h2&gt;実行&lt;/h2&gt;
+&lt;p&gt;今回は&lt;code&gt;gpt-oss-120b&lt;/code&gt;をLM Studioで動かし、ClineにMCPを接続し動作させてみました。&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;rules.mdを読んで以下の指示に従いなさい。
+PRODUCT-Aが10個必要です。
+足りない分を製造するためのアイテムを発注しなさい。&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;PRODUCT-Aは在庫に1個あり、製造するのにPART-aが2個とPART-bが3個必要です。
+PART-aは在庫が1個、PART-bは在庫が2個あります。&lt;/p&gt;
+&lt;p&gt;そのため、最終的にPART-aを17個とPART-bを25個発注する&lt;code&gt;order_item&lt;/code&gt;を呼び出せれば成功となります。&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;PRODUCT‑A を 10 個確保するために、在庫が不足していた部品 PART‑a と PART‑b の必要数量（それぞれ 18 個・27 個）を確認し、現在の在庫数（PART‑a が 1 個、PART‑b が 2 個）から不足分を計算しました。その結果、以下の発注を行いました。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;PART‑a を 17 個 発注（成功）&lt;/li&gt;
+&lt;li&gt;PART‑b を 25 個 発注（成功）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;これにより、PRODUCT‑A の残り 9 個を製造するために必要な部品はすべて確保されました。現在在庫は以下の通りです。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;PRODUCT‑A : 1 個（既存）&lt;/li&gt;
+&lt;li&gt;PART‑a : 18 個（発注分含む）&lt;/li&gt;
+&lt;li&gt;PART‑b : 27 個（発注分含む）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;以上で、要求された「PRODUCT‑A が 10 個必要」というタスクは完了しました。&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h2&gt;おわりに&lt;/h2&gt;
+&lt;p&gt;とりあえず単純化された業務をMCPを介して実行することは出来ました。&lt;/p&gt;
+&lt;p&gt;ただ、実業務に適用しようとすると、どうなんでしょうね？
+まぁ、考える機会があれば考えてみます。&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>Unicode Character Database の歩き方</title>
+		<link href="https://www.jyuch.dev/posts/2025/08-29-ucd/"/>
+		<updated>2025-08-29T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/08-29-ucd/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;所用でUnicode Character Database（UCD）で調べ物をする必要があったのですが、Unicodeのサイトのググラビリティが恐ろしく低く調べるのに難儀したので、未来の自分のために残しておこうというｱﾚです。&lt;/p&gt;
+&lt;h2&gt;Unicode® Standard&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://www.unicode.org/standard/standard.html&quot;&gt;Unicode® Standard&lt;/a&gt;はUnicodeの仕様についてのトップページです。&lt;/p&gt;
+&lt;p&gt;最新のUnicodeの仕様は&lt;a href=&quot;https://www.unicode.org/versions/latest/&quot;&gt;https://www.unicode.org/versions/latest/&lt;/a&gt;から飛べます。&lt;/p&gt;
+&lt;h2&gt;UAX #41: Common References for Unicode Standard Annexes&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://www.unicode.org/reports/tr41/&quot;&gt;UAX #41: Common References for UAXs&lt;/a&gt;は他のUAXへのリファレンスセットです。&lt;/p&gt;
+&lt;h2&gt;UAX #44: Unicode Character Database&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://www.unicode.org/reports/tr44/&quot;&gt;UAX #44: Unicode Character Database&lt;/a&gt;で各テキストファイルの中身が解説されています。&lt;/p&gt;
+&lt;p&gt;また、&lt;a href=&quot;https://www.unicode.org/Public/&quot;&gt;https://www.unicode.org/Public/&lt;/a&gt;から各UnicodeバージョンのUCDテキストファイルをダウンロードできます。&lt;/p&gt;
+&lt;h2&gt;Unicode Utilities&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://util.unicode.org/UnicodeJsps/index.jsp&quot;&gt;Unicode Utilities&lt;/a&gt;はUCDの内容を確認するのに役に立ちます。&lt;/p&gt;
+&lt;p&gt;特に&lt;a href=&quot;https://util.unicode.org/UnicodeJsps/character.jsp&quot;&gt;Unicode Utilities: Character Properties&lt;/a&gt;は文字のプロパティを確認する際に特に便利です。&lt;/p&gt;
+&lt;p&gt;デフォルトで表示されているのが☕なのは、こんなページを確認するような人は正常ではなく、多量のカフェインを要しているということを暗示しているのでしょうか？&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>ネットワークスペシャリスト試験に合格したお話</title>
+		<link href="https://www.jyuch.dev/posts/2025/07-13-2025-spring-nw/"/>
+		<updated>2025-07-13T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/07-13-2025-spring-nw/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;去年の12月の&lt;a href=&quot;https://www.jyuch.dev/posts/2024/12-28-2024-autumn-ap/&quot;&gt;応用情報技術者試験&lt;/a&gt;に続きネットワークスペシャリスト試験に合格したのでそのお話です。&lt;/p&gt;
+&lt;p&gt;特に言うこともないのですが、せっかく合格したので何か書いておこうというｱﾚです。&lt;/p&gt;
+&lt;p&gt;&lt;s&gt;こいついっつも試験受けてんな&lt;/s&gt;&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2025/07-05-2025-spring-nw/result.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;h2&gt;会場とか雰囲気とか&lt;/h2&gt;
+&lt;p&gt;前回に引き続きつくばの国際会議場で受験しました。&lt;/p&gt;
+&lt;p&gt;国際会議場でのネットワークスペシャリスト試験は２つ部屋に分かれていたので正確なところはわかりませんが、少なくとも私が受験したほうの部屋では午前Ⅰを受験されている人は居ませんでした。
+あの部屋の広さで午前Ⅰを自分一人で受験すると心が折れるかもしれません。&lt;/p&gt;
+&lt;p&gt;年齢層はというと応用情報と比べると若干年齢層が上がり、20代後半から30代の人が一番多かったと思います。
+ちらほら学生っぽい方もいて、学生時代はこのような試験を受けようとすら思わなかった私からするとすごいなと素直に感心してました。&lt;/p&gt;
+&lt;p&gt;私はというと、会場で参考書を見てもそわそわして全く集中できないタイプなので、午前Ⅱが始まるまでイヤホンで音楽を聴きながらひたすらラムネをボリボリ食っている異常者と化していました。&lt;/p&gt;
+&lt;h2&gt;アドバイス？&lt;/h2&gt;
+&lt;p&gt;午後Ⅰ・Ⅱはいくつかある問題から解く問題を選択する形式ですが、悠長に悩んでいる暇はないのである程度スパっと決める必要があります。&lt;/p&gt;
+&lt;p&gt;そこで、私は問題選択の方針として不得手な分野を優先して回避するというのをあらかじめ決めていました。&lt;/p&gt;
+&lt;p&gt;私の得意不得意の傾向は証明書 ＞ ルーティング ＞ セキュリティ ＞ マルチキャスト ＞ VoIP ＞＞＞ 無線という順なので、なるべく無線は避けるといった具合です。&lt;/p&gt;
+&lt;p&gt;また、個人的にはこういう試験を暗記で乗り切るのはちょっと違うかなと思っていますが、どのみち午後Ⅱとかいう暗記ではどうあがいても乗り切れない問題を解かないといけない事を考えると、少しでも午後問題の対策に勉強時間を割いたほうがいいと思います。
+そのうえで午前Ⅱを安定感をもって突破するなら暗記してしまうのも手だと思います。&lt;/p&gt;
+&lt;p&gt;また、午後Ⅱ問題も過去数年分は何周かはしたほうがいいと思います。
+これは問題と解答を覚えるというよりかは、問題文の日本語に慣れるという意味合いと、〇〇文字で述べよという記述に慣れるという意味合いがあります。&lt;/p&gt;
+&lt;p&gt;個人的には過去問は午前Ⅱは10分、午後Ⅰは30分、午後Ⅱは60分位で解けていたので、細かい時間しか取れない平日は午前Ⅱや午後Ⅰ、まとまった時間が取れる休日に午後Ⅱを解くようにすると時間を有効に使えると思います。&lt;/p&gt;
+&lt;p&gt;まぁ、結局は午後問題は自分が解きやすい問題が出ることを祈ることしかできないので、最終的には祈祷力が問われます。&lt;/p&gt;
+&lt;h2&gt;試験の感想&lt;/h2&gt;
+&lt;h3&gt;午前Ⅱ&lt;/h3&gt;
+&lt;p&gt;全体的な問題構成は例年通りといったところで、ざっくりと前半に計算問題、真ん中あたりにネットワークの知識を問う問題、後ろのほうに一般的なIT知識を問う問題構成となっていました。&lt;/p&gt;
+&lt;p&gt;計算問題は割と過去問からの出題が多かった気がします。
+ですので、ある程度過去問をやりこんでいて計算問題の答えの数字を覚えている人は計算せずに答えられたのかなと思います。
+特に答えが80になる例のアーランの問題は出題間隔的に出てもおかしくなかったので、予想が見事に的中して嬉しかった（？）です。&lt;/p&gt;
+&lt;p&gt;ただ、今回出ると予想していたOSコマンドインジェクションが出題されなかったので、次回は出ると思います。&lt;/p&gt;
+&lt;h3&gt;午後Ⅰ&lt;/h3&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;ルータの更新（BGPとOSPF、VRRP）&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;ネットワークの改善（NATとHTTP/2・HTTP/3・QUIC）&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;セキュアWebゲートウェイ（パケットフィルタリングとルーティング、証明書）&lt;/strong&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;午後Ⅰは１と３を選びました。
+というよりかは、２の図を見たときに「AP」という文字が飛び込んできて、とっさに「無線やんけ」と早とちりして回避した結果１と３になったという感じです。&lt;/p&gt;
+&lt;p&gt;解いた感想としては１と３はよくある午後Ⅰ問題です。&lt;/p&gt;
+&lt;p&gt;特にBGPとOSPFは近年よく出てきていたので、今年も出てくると予想していました。
+ただ、こうも頻出されると来年は傾向を変えてくるんじゃないかと疑いたくもなりますね。&lt;/p&gt;
+&lt;h3&gt;午後Ⅱ&lt;/h3&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;社内ネットワークのIPv6対応（IPv4・IPv6のデュアルスタック）&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;IoTシステム（LPWA・CoAP・DTLS）&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;ついにIPv6が出題されてしまいました。&lt;/p&gt;
+&lt;p&gt;正直今年出てくるとは思っていなかったのですが、IPv6なんか良さそうだな程度の理由で&lt;a href=&quot;https://www.lambdanote.com/collections/ipv6&quot;&gt;ラムダノートさんのプロフェッショナルIPv6&lt;/a&gt;を眺めていた時期があったので何とかなりました。&lt;/p&gt;
+&lt;p&gt;内容の難易度としてはグローバルユニキャストアドレスとリンクローカルアドレスがありますよとか、ルーターアドバタイズメントでプレフィックスを広告してSLAACでGUAを決定しますよという内容で、そこまでマニアックな内容ではないと思います。&lt;/p&gt;
+&lt;p&gt;「IPv6アドレスは〇〇ビットごとに：で区切る」の〇〇を答えよみたいな設問の下にIPv6アドレスの例が載っており数えればわかるじゃんみたいな問題も出てきていたので、知らないと手も足も出ないという難易度ではなかったと思います。&lt;/p&gt;
+&lt;p&gt;とはいえ、IPv4とはお作法が異なる世界なので、事前にある程度雰囲気を掴んでおかないと試験時間だけで何とかするのは厳しいと思います。&lt;/p&gt;
+&lt;p&gt;採点講評に『IPv6は普及が進んでいる技術なため、概要をしっかりと理解してほしい。』みたいなことを書かれると思うのと、今後は午後Ⅰに出題され始めると思うので概要だけでも掴んでおくといいと思います。&lt;/p&gt;
+&lt;h2&gt;ネットワークスペシャリストは役に立つか&lt;/h2&gt;
+&lt;p&gt;ネットワークスペシャリストを持っていると仕事もプライベートも全部うまくいくみたいにはなりませんが、得られた知識は普通に業務で使えますね。&lt;/p&gt;
+&lt;p&gt;会社によっては追加のお賃金が貰えたり昇格の条件にもなっていたりするところもあるみたいなので、まぁIT業界から足を洗うとかでなければ取って損は無いのではないでしょうか。&lt;/p&gt;
+&lt;p&gt;ちなみに弊社も持っていると中学生のお小遣い程度の報奨金がもらえます。
+勉強に要した時間で時給換算するとまるで最低賃金には届きませんが・・・&lt;/p&gt;
+&lt;h2&gt;おわりに&lt;/h2&gt;
+&lt;p&gt;IPv6アドレスを何度も手書きさせるのは正直やめてほしいッピ&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+	<entry>
+		<title>AWS Certified Solutions Architect - Associateに合格したお話</title>
+		<link href="https://www.jyuch.dev/posts/2025/07-04-saa-c03/"/>
+		<updated>2025-07-04T00:00:00Z</updated>
+		<id>https://www.jyuch.dev/posts/2025/07-04-saa-c03/</id>
+		<content type="html">&lt;h2&gt;はじめに&lt;/h2&gt;
+&lt;p&gt;AWS Certified Solutions Architect - Associateに合格したので、その話についてです。&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://www.jyuch.dev/img/2025/07-04-saa-c03/saa-c03.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;h2&gt;モチベーション&lt;/h2&gt;
+&lt;p&gt;本っ当にしょうもない理由なのですが、去年のAWS Summit Japanには認定者ラウンジというものが用意されていました。
+文字通りAWSの認定資格を持っている人が使えるというもので、使っている人たちを見て羨ましかったのを今でも覚えています。&lt;/p&gt;
+&lt;p&gt;今年のAWS Summit Japanにも参加出来るということで、それならば今年こそは認定者ラウンジを利用したいと思い取得したのが動機となります。&lt;/p&gt;
+&lt;p&gt;今年は認定者ラウンジはありませんでした。&lt;/p&gt;
+&lt;h2&gt;おわりに&lt;/h2&gt;
+&lt;p&gt;認定シールをもらえたのでよしとします。&lt;/p&gt;
+&lt;p&gt;おわり&lt;/p&gt;</content>
+	</entry>
+</feed>

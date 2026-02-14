@@ -1,0 +1,64 @@
+<!doctype html><html lang=ja><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0" name=viewport><title>Rustでも画像がカラーかモノクロか判別したい - レンコン畑でつかまえて</title><meta content=Rustとimage-rsを使用して画像がカラー画像かモノクロ画像か判別する方法を紹介します。 name=description><link href=/pagefind/pagefind-ui.css rel=stylesheet><link href=/styles.css rel=stylesheet><link href=/feed.xml rel=alternate title=レンコン畑でつかまえて type=application/atom+xml><link href=/feed.json rel=alternate title=レンコン畑でつかまえて type=application/json><script src="https://www.googletagmanager.com/gtag/js?id=G-1F9LYQGGMB" async></script><script>window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-1F9LYQGGMB');</script><script src=/pagefind/pagefind-ui.js></script><script>window.addEventListener('DOMContentLoaded',()=>{new PagefindUI({"element":"#search","showImages":false,"excerptLength":0,"showEmptyFilters":true,"showSubResults":false,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"});});</script><body><nav class=navbar><a class=navbar-home href=/> <strong>レンコン畑でつかまえて</strong> </a><ul class=navbar-links><li><a href=/> Home </a><li><a href=/posts/> Archive </a><li><a href=https://about.jyuch.dev/> About Me </a></ul><div class=navbar-search><div id=search></div></div></nav><main class=body-post><article class=post data-pagefind-body><div class=post-header><h1 class=post-title>Rustでも画像がカラーかモノクロか判別したい</h1><nav class=post-tags><a class=tag href=/tags/rust/>rust</a></nav><time datetime="2025-01-19 00:00:00" class=post-date> January 19th, 2025 </time></div><div class=post-body><h2>はじめに</h2><p><a href=/posts/2025/01-02-shrink-image-size-using-rust/>前回</a>では画像をavifにして縮小する方法を確認したのですが、よくよく確認してみると明らかにモノクロ画像なのにカラープロファイルで保存されている画像とかもちらほらあったんですよね。<p>じゃあカラー画像かモノクロ画像か判別して、モノクロならビット深度を8bitに落とせばもっとサイズを縮小出来るのではということでカラーかモノクロか判別する方法を確認してみました。<p><a href=https://takuya-1st.hatenablog.jp/entry/2023/04/05/230317>画像が、白黒かカラーか判定する。(白黒に近いスキャン画像を判定する）- それマグで！</a><p>HSV（HSB）色空間に変換して、S(Saturation)×V(Value)の値を閾値で2値化してその平均値で判定すればうまく行くとのことです。<h2>HSV色空間</h2><p>さて、前回に引き続き画像ライブラリにはimage-rsを使っているので、HSV色空間に変換するメソッドがあれば一発で終わります。ありませんでした<p>ただ、RGBからHSVに変換するのはそんなに難しくないので、ここでは愚直に実装していきます。<p>RGB用に以下の<code>max</code>、<code>min</code>なヘルパメソッドを定義して、<pre><code class="language-rust hljs"><span class=hljs-keyword>fn</span> <span class="hljs-title function_">max</span>(r: <span class=hljs-type>u8</span>, g: <span class=hljs-type>u8</span>, b: <span class=hljs-type>u8</span>) <span class=hljs-punctuation>-></span> <span class=hljs-type>u8</span> {
+    <span class=hljs-keyword>if</span> r > g && r > b {
+        r
+    } <span class=hljs-keyword>else</span> <span class=hljs-keyword>if</span> g > b && g > r {
+        g
+    } <span class=hljs-keyword>else</span> {
+        b
+    }
+}
+
+<span class=hljs-keyword>fn</span> <span class="hljs-title function_">min</span>(r: <span class=hljs-type>u8</span>, g: <span class=hljs-type>u8</span>, b: <span class=hljs-type>u8</span>) <span class=hljs-punctuation>-></span> <span class=hljs-type>u8</span> {
+    <span class=hljs-keyword>if</span> r &lt; g && r &lt; b {
+        r
+    } <span class=hljs-keyword>else</span> <span class=hljs-keyword>if</span> g &lt; b && g &lt; r {
+        g
+    } <span class=hljs-keyword>else</span> {
+        b
+    }
+}
+</code></pre><p>定義通りにSとVを計算するメソッドを実装します。 なお、値域は文献によってまちまちなのですが、ここでは0から255までとして計算しています。<p>また、今回の計算ではHは使用しないので実装していません。<pre><code class="language-rust hljs"><span class=hljs-keyword>fn</span> <span class="hljs-title function_">v</span>(r: <span class=hljs-type>u8</span>, g: <span class=hljs-type>u8</span>, b: <span class=hljs-type>u8</span>) <span class=hljs-punctuation>-></span> <span class=hljs-type>u8</span> {
+    <span class="hljs-title function_ invoke__">max</span>(r, g, b)
+}
+
+<span class=hljs-keyword>fn</span> <span class="hljs-title function_">s</span>(r: <span class=hljs-type>u8</span>, g: <span class=hljs-type>u8</span>, b: <span class=hljs-type>u8</span>) <span class=hljs-punctuation>-></span> <span class=hljs-type>u8</span> {
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>v</span> = <span class="hljs-title function_ invoke__">v</span>(r, g, b);
+
+    <span class=hljs-keyword>if</span> v == <span class=hljs-number>0</span> {
+        <span class=hljs-number>0</span>
+    } <span class=hljs-keyword>else</span> {
+        (<span class=hljs-number>255f64</span> * ((<span class="hljs-title function_ invoke__">max</span>(r, g, b) <span class=hljs-keyword>as</span> <span class=hljs-type>f64</span> - <span class="hljs-title function_ invoke__">min</span>(r, g, b) <span class=hljs-keyword>as</span> <span class=hljs-type>f64</span>) / <span class="hljs-title function_ invoke__">max</span>(r, g, b) <span class=hljs-keyword>as</span> <span class=hljs-type>f64</span>)) <span class=hljs-keyword>as</span> <span class=hljs-type>u8</span>
+    }
+}
+</code></pre><h2>判定</h2><p>あとは画像を読み込んで1ピクセル毎にHSV色空間に変換して閾値から2値化して平均すれば完了です。<pre><code class="language-rust hljs"><span class=hljs-keyword>fn</span> <span class="hljs-title function_">is_monochrome</span>(img: &DynamicImage) <span class=hljs-punctuation>-></span> <span class=hljs-type>f64</span> {
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>img</span> = img.<span class="hljs-title function_ invoke__">clone</span>().<span class="hljs-title function_ invoke__">into_rgb8</span>();
+    <span class=hljs-keyword>let</span> <span class=hljs-keyword>mut </span><span class=hljs-variable>sum</span> = <span class=hljs-number>0u32</span>;
+    <span class=hljs-keyword>let</span> <span class=hljs-keyword>mut </span><span class=hljs-variable>n</span> = <span class=hljs-number>0u32</span>;
+
+    <span class=hljs-comment>// 2値化するときの閾値（今回は10%を使用している）</span>
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>threshold</span> = (<span class=hljs-number>256f64</span> * <span class=hljs-number>256f64</span> * <span class=hljs-number>0.1</span>) <span class=hljs-keyword>as</span> <span class=hljs-type>u32</span>;
+    <span class=hljs-keyword>for</span> (_, _, pixel) <span class=hljs-keyword>in</span> img.<span class="hljs-title function_ invoke__">enumerate_pixels</span>() {
+        <span class=hljs-keyword>let</span> <span class=hljs-variable>r</span> = pixel.<span class=hljs-number>0</span>[<span class=hljs-number>0</span>];
+        <span class=hljs-keyword>let</span> <span class=hljs-variable>g</span> = pixel.<span class=hljs-number>0</span>[<span class=hljs-number>1</span>];
+        <span class=hljs-keyword>let</span> <span class=hljs-variable>b</span> = pixel.<span class=hljs-number>0</span>[<span class=hljs-number>2</span>];
+
+        <span class=hljs-comment>// HSV色空間に変換</span>
+        <span class=hljs-keyword>let</span> <span class=hljs-variable>v</span> = <span class="hljs-title function_ invoke__">v</span>(r, g, b);
+        <span class=hljs-keyword>let</span> <span class=hljs-variable>s</span> = <span class="hljs-title function_ invoke__">s</span>(r, g, b);
+        <span class=hljs-keyword>let</span> <span class=hljs-variable>sv</span> = s <span class=hljs-keyword>as</span> <span class=hljs-type>u32</span> * v <span class=hljs-keyword>as</span> <span class=hljs-type>u32</span>;
+
+        <span class=hljs-comment>// 2値化</span>
+        <span class=hljs-keyword>if</span> sv > threshold {
+            sum += <span class=hljs-number>1</span>;
+        }
+        n += <span class=hljs-number>1</span>;
+    }
+    
+    <span class=hljs-comment>// 平均を計算</span>
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>mean</span> = sum <span class=hljs-keyword>as</span> <span class=hljs-type>f64</span> / n <span class=hljs-keyword>as</span> <span class=hljs-type>f64</span>;
+    mean
+}
+</code></pre><p>結果が0よりも大きければカラー、0ならモノクロと判別出来ると思います。たぶん<p><a href=https://github.com/jyuch/is-monochrome>is-monochrome</a><p>おわり</div></article><hr><nav class=post-navigation><ul><li>← Previous: <a href=/posts/2025/01-02-shrink-image-size-using-rust/ rel=prev>RustでもAVIFフォーマットに変換して画像サイズを縮小したい</a><li><strong>Next: <a href=/posts/2025/05-10-new-main-pc/ rel=next>メインPCを更新したお話</a> →</strong></ul></nav></main><footer><div><a href=/feed.xml> <svg viewbox="0 0 16 16" height=16 width=16 xmlns=http://www.w3.org/2000/svg><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"></path><path d="M5.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-3-8.5a1 1 0 0 1 1-1c5.523 0 10 4.477 10 10a1 1 0 1 1-2 0 8 8 0 0 0-8-8 1 1 0 0 1-1-1zm0 4a1 1 0 0 1 1-1 6 6 0 0 1 6 6 1 1 0 1 1-2 0 4 4 0 0 0-4-4 1 1 0 0 1-1-1z"></path></svg> </a></div></footer>

@@ -1,0 +1,451 @@
+<!doctype html><html lang=ja><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0" name=viewport><title>Databricksのread_files関数でもExcelファイルを読み込みたい - レンコン畑でつかまえて</title><meta content=Databricksのread_files関数でExcelファイルを読み込む際の挙動について評価しました。 name=description><link href=/pagefind/pagefind-ui.css rel=stylesheet><link href=/styles.css rel=stylesheet><link href=/feed.xml rel=alternate title=レンコン畑でつかまえて type=application/atom+xml><link href=/feed.json rel=alternate title=レンコン畑でつかまえて type=application/json><script src="https://www.googletagmanager.com/gtag/js?id=G-1F9LYQGGMB" async></script><script>window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-1F9LYQGGMB');</script><script src=/pagefind/pagefind-ui.js></script><script>window.addEventListener('DOMContentLoaded',()=>{new PagefindUI({"element":"#search","showImages":false,"excerptLength":0,"showEmptyFilters":true,"showSubResults":false,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"});});</script><body><nav class=navbar><a class=navbar-home href=/> <strong>レンコン畑でつかまえて</strong> </a><ul class=navbar-links><li><a href=/> Home </a><li><a href=/posts/> Archive </a><li><a href=https://about.jyuch.dev/> About Me </a></ul><div class=navbar-search><div id=search></div></div></nav><main class=body-post><article class=post data-pagefind-body><div class=post-header><h1 class=post-title>Databricksのread_files関数でもExcelファイルを読み込みたい</h1><nav class=post-tags><a class=tag href=/tags/databricks/>databricks</a></nav><time datetime="2026-01-17 00:00:00" class=post-date> January 17th, 2026 </time></div><div class=post-body><h2>2月8日追記</h2><p>現時点ではフリガナ問題は解決しています。<p>また、より大きいファイルでも取り込めるようになっていました。 ですが、調子に乗って大きなサイズを放り込むと処理が終わらないので、その辺はいい感じにする必要があります。<h2>注意事項</h2><p>本検証は2026年1月17時点の内容で検証しています。 リリース版は挙動が異なる場合があります。<p>また、Databricks Free Editionで評価しています。 そのため、商用版と挙動が異なる場合があります。<h2>はじめに</h2><p>Databricksの<code>read_files</code>関数はCSVやJSONフォーマットをいい感じに読み込んでくれる関数です。 その<code>read_files</code>関数がExcelファイルの読み込みをサポートしました。<p>ですが、Excelフォーマットをプログラムで扱う際のトラップに悩まされてきた生産性アプリケーション開発者も多いのではないでしょうか。<p>そこで、今回はトラップになりそうな部分の評価を行ってみました。<h2>Office Open XMLフォーマット</h2><p>今回はExcelフォーマットのうち、Office Open XMLフォーマット（<code>xlsx</code>）を評価してみます。 そのOOXMLフォーマットのうち、今回の検証で触れる内容について軽く解説をしていきます。<p>OOXMLはXMLの名前がついている通り、主にzipで圧縮されたXMLファイルで構成されています。<p>たとえば、以下のようなExcelファイルをzip展開すると、以下のような構造となっています。<p><img alt=example.xlsxの見た目 src=/img/2026/01-17-excel-read-files/example.xlsx.png><pre><code class="language-txt hljs language-plaintext">example.xlsx
+│
+│  [Content_Types].xml
+│
+├─docProps
+│      app.xml
+│      core.xml
+│
+├─xl
+│  │  sharedStrings.xml
+│  │  styles.xml
+│  │  workbook.xml
+│  │
+│  ├─printerSettings
+│  │      printerSettings1.bin
+│  │
+│  ├─theme
+│  │      theme1.xml
+│  │
+│  ├─worksheets
+│  │  │  sheet1.xml
+│  │  │
+│  │  └─_rels
+│  │          sheet1.xml.rels
+│  │
+│  └─_rels
+│          workbook.xml.rels
+│
+└─_rels
+        .rels
+</code></pre><p>そのうち、内容を確認する際に見るのが以下の二つのファイルになります。<h3><code>xl\worksheets\sheet1.xml</code></h3><p><code>xl\worksheets</code>以下にはシート毎にシートの内容が含まれているXMLファイルが格納されています。<p>上記の例だと、こんな感じに内容になるはずです。<pre><code class="language-xml hljs"><span class=hljs-meta>&lt;?xml version=<span class=hljs-string>"1.0"</span> encoding=<span class=hljs-string>"UTF-8"</span> standalone=<span class=hljs-string>"yes"</span>?></span>
+<span class=hljs-tag>&lt;<span class=hljs-name>worksheet</span> <span class=hljs-attr>xmlns</span>=<span class=hljs-string>"http://schemas.openxmlformats.org/spreadsheetml/2006/main"</span>
+    <span class=hljs-attr>xmlns:r</span>=<span class=hljs-string>"http://schemas.openxmlformats.org/officeDocument/2006/relationships"</span>
+    <span class=hljs-attr>xmlns:mc</span>=<span class=hljs-string>"http://schemas.openxmlformats.org/markup-compatibility/2006"</span>
+    <span class=hljs-attr>mc:Ignorable</span>=<span class=hljs-string>"x14ac xr xr2 xr3"</span>
+    <span class=hljs-attr>xmlns:x14ac</span>=<span class=hljs-string>"http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac"</span>
+    <span class=hljs-attr>xmlns:xr</span>=<span class=hljs-string>"http://schemas.microsoft.com/office/spreadsheetml/2014/revision"</span>
+    <span class=hljs-attr>xmlns:xr2</span>=<span class=hljs-string>"http://schemas.microsoft.com/office/spreadsheetml/2015/revision2"</span>
+    <span class=hljs-attr>xmlns:xr3</span>=<span class=hljs-string>"http://schemas.microsoft.com/office/spreadsheetml/2016/revision3"</span>
+    <span class=hljs-attr>xr:uid</span>=<span class=hljs-string>"{00000000-0001-0000-0000-000000000000}"</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>dimension</span> <span class=hljs-attr>ref</span>=<span class=hljs-string>"A1:B2"</span> /></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>sheetViews</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>sheetView</span> <span class=hljs-attr>tabSelected</span>=<span class=hljs-string>"1"</span> <span class=hljs-attr>workbookViewId</span>=<span class=hljs-string>"0"</span> /></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>sheetViews</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>sheetFormatPr</span> <span class=hljs-attr>defaultRowHeight</span>=<span class=hljs-string>"18.75"</span> /></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>sheetData</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>row</span> <span class=hljs-attr>r</span>=<span class=hljs-string>"1"</span> <span class=hljs-attr>spans</span>=<span class=hljs-string>"1:2"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>c</span> <span class=hljs-attr>r</span>=<span class=hljs-string>"A1"</span> <span class=hljs-attr>t</span>=<span class=hljs-string>"s"</span>></span>
+                <span class=hljs-tag>&lt;<span class=hljs-name>v</span>></span>0<span class=hljs-tag>&lt;/<span class=hljs-name>v</span>></span>
+            <span class=hljs-tag>&lt;/<span class=hljs-name>c</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>row</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>row</span> <span class=hljs-attr>r</span>=<span class=hljs-string>"2"</span> <span class=hljs-attr>spans</span>=<span class=hljs-string>"1:2"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>c</span> <span class=hljs-attr>r</span>=<span class=hljs-string>"B2"</span> <span class=hljs-attr>t</span>=<span class=hljs-string>"s"</span>></span>
+                <span class=hljs-tag>&lt;<span class=hljs-name>v</span>></span>1<span class=hljs-tag>&lt;/<span class=hljs-name>v</span>></span>
+            <span class=hljs-tag>&lt;/<span class=hljs-name>c</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>row</span>></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>sheetData</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>phoneticPr</span> <span class=hljs-attr>fontId</span>=<span class=hljs-string>"1"</span> /></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>pageMargins</span> <span class=hljs-attr>left</span>=<span class=hljs-string>"0.7"</span> <span class=hljs-attr>right</span>=<span class=hljs-string>"0.7"</span> <span class=hljs-attr>top</span>=<span class=hljs-string>"0.75"</span> <span class=hljs-attr>bottom</span>=<span class=hljs-string>"0.75"</span> <span class=hljs-attr>header</span>=<span class=hljs-string>"0.3"</span> <span class=hljs-attr>footer</span>=<span class=hljs-string>"0.3"</span> /></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>pageSetup</span> <span class=hljs-attr>paperSize</span>=<span class=hljs-string>"9"</span> <span class=hljs-attr>orientation</span>=<span class=hljs-string>"portrait"</span> <span class=hljs-attr>r:id</span>=<span class=hljs-string>"rId1"</span> /></span>
+<span class=hljs-tag>&lt;/<span class=hljs-name>worksheet</span>></span>
+</code></pre><p><code>A1</code>と<code>B2</code>セルにデータが含まれているのが分かりますね。 ですが、謎の数字<code>0</code>と<code>1</code>があるだけで、内容は特には記述されていません。<p>テキスト情報はどこに行ったのでしょう？<p>その答えはShared String Table（SST、<code>sharedStrings.xml</code>）の中にあります。<h3><code>xl\sharedStrings.xml</code></h3><p>SSTはその名の通り、複数の場所から参照されるテキスト情報を格納するためテーブルです。<p>上記の例だとシートはSSTのインデックス番号を参照していたことになります。<pre><code class="language-xml hljs"><span class=hljs-meta>&lt;?xml version=<span class=hljs-string>"1.0"</span> encoding=<span class=hljs-string>"UTF-8"</span> standalone=<span class=hljs-string>"yes"</span>?></span>
+<span class=hljs-tag>&lt;<span class=hljs-name>sst</span> <span class=hljs-attr>xmlns</span>=<span class=hljs-string>"http://schemas.openxmlformats.org/spreadsheetml/2006/main"</span> <span class=hljs-attr>count</span>=<span class=hljs-string>"2"</span> <span class=hljs-attr>uniqueCount</span>=<span class=hljs-string>"2"</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>si</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>Hello Excel<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>phoneticPr</span> <span class=hljs-attr>fontId</span>=<span class=hljs-string>"1"</span> /></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>si</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>si</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>こんにちはExcel<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>phoneticPr</span> <span class=hljs-attr>fontId</span>=<span class=hljs-string>"1"</span> /></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>si</span>></span>
+<span class=hljs-tag>&lt;/<span class=hljs-name>sst</span>></span>
+</code></pre><p>なお、文字情報は必ずSSTに格納しなければならない訳ではなく、Excelを出力するライブラリはシートのXMLに直接文字を格納する場合が多いです。<h2>Excelファイルの読み込み</h2><p>というわけで、Excelの深淵を覗く準備ができたところで<code>read_files</code>関数でファイルを読み込んでみましょう。<h3>単純な例</h3><p>以下のような単純なExcelファイルを用意します。<p><img alt src=/img/2026/01-17-excel-read-files/01_simple_files.xlsx.png><p>最低限のオプションだけ設定すると以下のように出力されます。<pre><code class="language-sql hljs"><span class=hljs-keyword>SELECT</span>
+  <span class=hljs-operator>*</span>
+<span class=hljs-keyword>FROM</span>
+  read_files(
+    "/Volumes/excel_read_files/default/files/01_simple_files.xlsx",
+    format <span class=hljs-operator>=</span><span class=hljs-operator>></span> "excel",
+    schemaEvolutionMode <span class=hljs-operator>=</span><span class=hljs-operator>></span> "none"
+  )
+</code></pre><p><img alt src=/img/2026/01-17-excel-read-files/output_01.png><p>スキーマを推論してくれるので、日付や数字もそれぞれの型として認識してくれています。<p>ですが、小数が少し怪しいですね。 内部的にはこの形で格納されているので、<code>read_files</code>関数が悪いわけではなさそうです。<pre><code class="language-xml hljs"><span class=hljs-meta>&lt;?xml version=<span class=hljs-string>"1.0"</span> encoding=<span class=hljs-string>"UTF-8"</span> standalone=<span class=hljs-string>"yes"</span>?></span>
+<span class=hljs-tag>&lt;<span class=hljs-name>worksheet</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>sheetData</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>row</span> <span class=hljs-attr>r</span>=<span class=hljs-string>"1"</span> <span class=hljs-attr>spans</span>=<span class=hljs-string>"1:4"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>c</span> <span class=hljs-attr>r</span>=<span class=hljs-string>"C1"</span>></span>
+                <span class=hljs-tag>&lt;<span class=hljs-name>v</span>></span>1.1000000000000001<span class=hljs-tag>&lt;/<span class=hljs-name>v</span>></span>
+            <span class=hljs-tag>&lt;/<span class=hljs-name>c</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>row</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>row</span> <span class=hljs-attr>r</span>=<span class=hljs-string>"2"</span> <span class=hljs-attr>spans</span>=<span class=hljs-string>"1:4"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>c</span> <span class=hljs-attr>r</span>=<span class=hljs-string>"C2"</span>></span>
+                <span class=hljs-tag>&lt;<span class=hljs-name>v</span>></span>2.2000000000000002<span class=hljs-tag>&lt;/<span class=hljs-name>v</span>></span>
+            <span class=hljs-tag>&lt;/<span class=hljs-name>c</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>row</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>row</span> <span class=hljs-attr>r</span>=<span class=hljs-string>"3"</span> <span class=hljs-attr>spans</span>=<span class=hljs-string>"1:4"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>c</span> <span class=hljs-attr>r</span>=<span class=hljs-string>"C3"</span>></span>
+                <span class=hljs-tag>&lt;<span class=hljs-name>v</span>></span>3.3<span class=hljs-tag>&lt;/<span class=hljs-name>v</span>></span>
+            <span class=hljs-tag>&lt;/<span class=hljs-name>c</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>row</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>row</span> <span class=hljs-attr>r</span>=<span class=hljs-string>"4"</span> <span class=hljs-attr>spans</span>=<span class=hljs-string>"1:4"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>c</span> <span class=hljs-attr>r</span>=<span class=hljs-string>"C4"</span>></span>
+                <span class=hljs-tag>&lt;<span class=hljs-name>v</span>></span>4.4000000000000004<span class=hljs-tag>&lt;/<span class=hljs-name>v</span>></span>
+            <span class=hljs-tag>&lt;/<span class=hljs-name>c</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>row</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>row</span> <span class=hljs-attr>r</span>=<span class=hljs-string>"5"</span> <span class=hljs-attr>spans</span>=<span class=hljs-string>"1:4"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>c</span> <span class=hljs-attr>r</span>=<span class=hljs-string>"C5"</span>></span>
+                <span class=hljs-tag>&lt;<span class=hljs-name>v</span>></span>5.5<span class=hljs-tag>&lt;/<span class=hljs-name>v</span>></span>
+            <span class=hljs-tag>&lt;/<span class=hljs-name>c</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>row</span>></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>sheetData</span>></span>
+<span class=hljs-tag>&lt;/<span class=hljs-name>worksheet</span>></span>
+</code></pre><p>型が既知なのであれば、あらかじめスキーマヒントを与えておいたほうが良いかもしれません。<pre><code class="language-sql hljs"><span class=hljs-keyword>SELECT</span>
+  <span class=hljs-operator>*</span>
+<span class=hljs-keyword>FROM</span>
+  read_files(
+    "/Volumes/excel_read_files/default/files/01_simple_files.xlsx",
+    format <span class=hljs-operator>=</span><span class=hljs-operator>></span> "excel",
+    schemaEvolutionMode <span class=hljs-operator>=</span><span class=hljs-operator>></span> "none",
+    schemaHints <span class=hljs-operator>=</span><span class=hljs-operator>></span> "_c2 decimal(5,1)"
+  )
+</code></pre><p><img alt src=/img/2026/01-17-excel-read-files/output_02.png><p>ちなみに、<code>inferColumnTypes</code>はExcel読み込みでは考慮されないようです。<pre><code class="language-sql hljs"><span class=hljs-keyword>SELECT</span>
+  <span class=hljs-operator>*</span>
+<span class=hljs-keyword>FROM</span>
+  read_files(
+    "/Volumes/excel_read_files/default/files/01_simple_files.xlsx",
+    format <span class=hljs-operator>=</span><span class=hljs-operator>></span> "excel",
+    schemaEvolutionMode <span class=hljs-operator>=</span><span class=hljs-operator>></span> "none",
+    inferColumnTypes <span class=hljs-operator>=</span><span class=hljs-operator>></span> <span class=hljs-literal>false</span>
+  )
+</code></pre><p><img alt src=/img/2026/01-17-excel-read-files/output_03.png><p>スキーマヒントを与えて強制的に文字列とすると、to_stringをしたような形式になります。<p>また、日付は<code>MM/DD/YY</code>形式になります。USロケールなのかもしれません。<pre><code class="language-sql hljs"><span class=hljs-keyword>SELECT</span>
+  <span class=hljs-operator>*</span>
+<span class=hljs-keyword>FROM</span>
+  read_files(
+    "/Volumes/excel_read_files/default/files/01_simple_files.xlsx",
+    format <span class=hljs-operator>=</span><span class=hljs-operator>></span> "excel",
+    schemaEvolutionMode <span class=hljs-operator>=</span><span class=hljs-operator>></span> "none",
+    schemaHints <span class=hljs-operator>=</span><span class=hljs-operator>></span> "_c1 string, _c2 string, _c3 string"
+  )
+</code></pre><p><img alt src=/img/2026/01-17-excel-read-files/output_04.png><h3>日本語を含む例</h3><p>次はよくオフィスで流通していそうなファイルを読み込んでみます。<p>今回の検証で初めて知ったのですが、Excelは変換時の元テキストをフリガナとして格納してくれるっぽいです。<p><img alt src=/img/2026/01-17-excel-read-files/02_日本語を含むファイル.xlsx.png><p>関係ないセルを読まないよう、<code>dataAddress</code>で読み込む場所を明示してあげます。<pre><code class="language-sql hljs"><span class=hljs-keyword>SELECT</span>
+  <span class=hljs-operator>*</span>
+<span class=hljs-keyword>FROM</span>
+  read_files(
+    "/Volumes/excel_read_files/default/files/02_日本語を含むファイル.xlsx",
+    dataAddress <span class=hljs-operator>=</span><span class=hljs-operator>></span> "'お供　給与表'!B2:C5",
+    headerRows <span class=hljs-operator>=</span><span class=hljs-operator>></span> <span class=hljs-number>1</span>,
+    format <span class=hljs-operator>=</span><span class=hljs-operator>></span> "excel",
+    schemaEvolutionMode <span class=hljs-operator>=</span><span class=hljs-operator>></span> "none"
+  )
+</code></pre><p><img alt src=/img/2026/01-17-excel-read-files/output_05.png><p><strong>良くないですね。</strong> フリガナも拾ってきてしまっています。<p>少なくとも日本語だと意図してフリガナを拾ってほしいケースはあまりないと思うので、GAまでにフリガナを拾わないか、オプションで選択出来るようになるといいなと思います。<p>ちなみに、この例だとSSTはこのようになっています。 シート名として入力したテキストもフォネティックを拾っているとは思いませんでした。<pre><code class="language-xml hljs"><span class=hljs-meta>&lt;?xml version=<span class=hljs-string>"1.0"</span> encoding=<span class=hljs-string>"UTF-8"</span> standalone=<span class=hljs-string>"yes"</span>?></span>
+<span class=hljs-tag>&lt;<span class=hljs-name>sst</span> <span class=hljs-attr>xmlns</span>=<span class=hljs-string>"http://schemas.openxmlformats.org/spreadsheetml/2006/main"</span> <span class=hljs-attr>count</span>=<span class=hljs-string>"8"</span> <span class=hljs-attr>uniqueCount</span>=<span class=hljs-string>"8"</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>si</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>お供<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"1"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"2"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>トモ<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>phoneticPr</span> <span class=hljs-attr>fontId</span>=<span class=hljs-string>"1"</span> /></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>si</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>si</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>きび団子支給数<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"2"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"4"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>ダンゴ<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"4"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"7"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>シキュウスウ<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>phoneticPr</span> <span class=hljs-attr>fontId</span>=<span class=hljs-string>"1"</span> /></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>si</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>si</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>猿<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"0"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"1"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>サル<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>phoneticPr</span> <span class=hljs-attr>fontId</span>=<span class=hljs-string>"1"</span> /></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>si</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>si</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>犬<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"0"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"1"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>イヌ<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>phoneticPr</span> <span class=hljs-attr>fontId</span>=<span class=hljs-string>"1"</span> /></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>si</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>si</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>雉<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"0"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"1"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>キジ<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>phoneticPr</span> <span class=hljs-attr>fontId</span>=<span class=hljs-string>"1"</span> /></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>si</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>si</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>令和8年1月17日改定<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"0"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"2"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>レイワ<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"3"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"4"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>ネン<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"5"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"6"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>ガツ<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"8"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"9"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>ニチ<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"9"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"11"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>カイテイ<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>phoneticPr</span> <span class=hljs-attr>fontId</span>=<span class=hljs-string>"1"</span> /></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>si</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>si</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>※変更時はおじいさんとおばあさんの承認を得ること<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"1"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"4"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>ヘンコウジ<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"17"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"19"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>ショウニン<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"20"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"21"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>エ<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>phoneticPr</span> <span class=hljs-attr>fontId</span>=<span class=hljs-string>"1"</span> /></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>si</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>si</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>全然関係ないデータ<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"0"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"4"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>ゼンゼンカンケイ<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>phoneticPr</span> <span class=hljs-attr>fontId</span>=<span class=hljs-string>"1"</span> /></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>si</span>></span>
+<span class=hljs-tag>&lt;/<span class=hljs-name>sst</span>></span>
+</code></pre><p>手動でフリガナを消してあげると意図した感じに取り込んでくれます。<p>ただし、手動で消すのは結構めんどくさいので、前処理でフリガナを消すプログラムを動かすとかでしょうか・・・<pre><code class="language-sql hljs"><span class=hljs-keyword>SELECT</span>
+  <span class=hljs-operator>*</span>
+<span class=hljs-keyword>FROM</span>
+  read_files(
+    "/Volumes/excel_read_files/default/files/03_日本語を含むファイル_フリガナ除去.xlsx",
+    dataAddress <span class=hljs-operator>=</span><span class=hljs-operator>></span> "'お供　給与表'!B2:C5",
+    headerRows <span class=hljs-operator>=</span><span class=hljs-operator>></span> <span class=hljs-number>1</span>,
+    format <span class=hljs-operator>=</span><span class=hljs-operator>></span> "excel",
+    schemaEvolutionMode <span class=hljs-operator>=</span><span class=hljs-operator>></span> "none"
+  )
+</code></pre><p><img alt src=/img/2026/01-17-excel-read-files/output_06.png><pre><code class="language-xml hljs"><span class=hljs-meta>&lt;?xml version=<span class=hljs-string>"1.0"</span> encoding=<span class=hljs-string>"UTF-8"</span> standalone=<span class=hljs-string>"yes"</span>?></span>
+<span class=hljs-tag>&lt;<span class=hljs-name>sst</span> <span class=hljs-attr>xmlns</span>=<span class=hljs-string>"http://schemas.openxmlformats.org/spreadsheetml/2006/main"</span> <span class=hljs-attr>count</span>=<span class=hljs-string>"8"</span> <span class=hljs-attr>uniqueCount</span>=<span class=hljs-string>"8"</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>si</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>令和8年1月17日改定<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"0"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"2"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>レイワ<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"3"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"4"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>ネン<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"5"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"6"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>ガツ<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"8"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"9"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>ニチ<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"9"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"11"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>カイテイ<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>phoneticPr</span> <span class=hljs-attr>fontId</span>=<span class=hljs-string>"1"</span> /></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>si</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>si</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>※変更時はおじいさんとおばあさんの承認を得ること<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"1"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"4"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>ヘンコウジ<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"17"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"19"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>ショウニン<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"20"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"21"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>エ<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>phoneticPr</span> <span class=hljs-attr>fontId</span>=<span class=hljs-string>"1"</span> /></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>si</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>si</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>全然関係ないデータ<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>rPh</span> <span class=hljs-attr>sb</span>=<span class=hljs-string>"0"</span> <span class=hljs-attr>eb</span>=<span class=hljs-string>"4"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>ゼンゼンカンケイ<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>rPh</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>phoneticPr</span> <span class=hljs-attr>fontId</span>=<span class=hljs-string>"1"</span> /></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>si</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>si</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>お供<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>phoneticPr</span> <span class=hljs-attr>fontId</span>=<span class=hljs-string>"1"</span> /></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>si</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>si</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>きび団子支給数<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>phoneticPr</span> <span class=hljs-attr>fontId</span>=<span class=hljs-string>"1"</span> /></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>si</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>si</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>猿<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>phoneticPr</span> <span class=hljs-attr>fontId</span>=<span class=hljs-string>"1"</span> /></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>si</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>si</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>犬<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>phoneticPr</span> <span class=hljs-attr>fontId</span>=<span class=hljs-string>"1"</span> /></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>si</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>si</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>t</span>></span>雉<span class=hljs-tag>&lt;/<span class=hljs-name>t</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>phoneticPr</span> <span class=hljs-attr>fontId</span>=<span class=hljs-string>"1"</span> /></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>si</span>></span>
+<span class=hljs-tag>&lt;/<span class=hljs-name>sst</span>></span>
+</code></pre><h3>計算式を含む例</h3><p>次は式を含むExcelファイルを読み込ませてみます。<p>ドキュメントページでは<a href=https://docs.databricks.com/aws/ja/query/formats/excel>評価された数式を取り込みます</a>とありますが、どのような意味なのでしょうか。<p><img alt src=/img/2026/01-17-excel-read-files/04_formula.xlsx.png><pre><code class="language-sql hljs"><span class=hljs-keyword>SELECT</span>
+  <span class=hljs-operator>*</span>
+<span class=hljs-keyword>FROM</span>
+  read_files(
+    "/Volumes/excel_read_files/default/files/04_formula.xlsx",
+    format <span class=hljs-operator>=</span><span class=hljs-operator>></span> "excel",
+    schemaEvolutionMode <span class=hljs-operator>=</span><span class=hljs-operator>></span> "none"
+  )
+</code></pre><p><img alt src=/img/2026/01-17-excel-read-files/output_07.png><p>エクセルで数式セルを作成すると、内部的には数式と共に計算済みの値が格納されています。 ドキュメントの「評価された数式を取り込みます」とはおそらく内部的に保持されている計算済みの値を取り込むということを言っているのだと思われます。<pre><code class="language-xml hljs"><span class=hljs-meta>&lt;?xml version=<span class=hljs-string>"1.0"</span> encoding=<span class=hljs-string>"UTF-8"</span> standalone=<span class=hljs-string>"yes"</span>?></span>
+<span class=hljs-tag>&lt;<span class=hljs-name>worksheet</span>></span>
+    <span class=hljs-tag>&lt;<span class=hljs-name>sheetData</span>></span>
+        <span class=hljs-tag>&lt;<span class=hljs-name>row</span> <span class=hljs-attr>r</span>=<span class=hljs-string>"1"</span> <span class=hljs-attr>spans</span>=<span class=hljs-string>"1:3"</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>c</span> <span class=hljs-attr>r</span>=<span class=hljs-string>"A1"</span>></span>
+                <span class=hljs-tag>&lt;<span class=hljs-name>v</span>></span>1<span class=hljs-tag>&lt;/<span class=hljs-name>v</span>></span>
+            <span class=hljs-tag>&lt;/<span class=hljs-name>c</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>c</span> <span class=hljs-attr>r</span>=<span class=hljs-string>"B1"</span>></span>
+                <span class=hljs-tag>&lt;<span class=hljs-name>v</span>></span>2<span class=hljs-tag>&lt;/<span class=hljs-name>v</span>></span>
+            <span class=hljs-tag>&lt;/<span class=hljs-name>c</span>></span>
+            <span class=hljs-tag>&lt;<span class=hljs-name>c</span> <span class=hljs-attr>r</span>=<span class=hljs-string>"C1"</span>></span>
+                <span class=hljs-tag>&lt;<span class=hljs-name>f</span>></span>A1+B1<span class=hljs-tag>&lt;/<span class=hljs-name>f</span>></span>
+                <span class=hljs-tag>&lt;<span class=hljs-name>v</span>></span>3<span class=hljs-tag>&lt;/<span class=hljs-name>v</span>></span>
+            <span class=hljs-tag>&lt;/<span class=hljs-name>c</span>></span>
+        <span class=hljs-tag>&lt;/<span class=hljs-name>row</span>></span>
+    <span class=hljs-tag>&lt;/<span class=hljs-name>sheetData</span>></span>
+<span class=hljs-tag>&lt;/<span class=hljs-name>worksheet</span>></span>
+</code></pre><p>では、計算済みの値が格納されないケースがあるのでしょうか。<p>全部のケースを確認した訳ではありませんが、ライブラリを使用してExcelファイルをプログラムから作成する場合は数式のみが格納されて計算済みの値が格納されない場合が多いです。<p>たとえば、以下のようなコードを使用して上記のExcelと同じようなファイルを作成したとします。<pre><code class="language-python hljs"><span class=hljs-keyword>import</span> openpyxl
+
+
+<span class=hljs-keyword>def</span> <span class="hljs-title function_">main</span>():
+    wb = openpyxl.Workbook()
+    sheet = wb.active
+
+    <span class=hljs-keyword>for</span> it <span class=hljs-keyword>in</span> <span class=hljs-built_in>range</span>(<span class=hljs-number>1</span>, <span class=hljs-number>5</span>):
+        sheet.cell(it, <span class=hljs-number>1</span>).value = it
+        sheet.cell(it, <span class=hljs-number>2</span>).value = it + <span class=hljs-number>1</span>
+        sheet.cell(it, <span class=hljs-number>3</span>).value = <span class=hljs-string>f"=A<span class=hljs-subst>{it}</span>+B<span class=hljs-subst>{it}</span>"</span>
+
+    wb.save(<span class=hljs-string>"05_formula_no_value.xlsx"</span>)
+
+
+<span class=hljs-keyword>if</span> __name__ == <span class=hljs-string>"__main__"</span>:
+    main()
+</code></pre><p>Excelで開くと未計算のセルは計算されて表示されますが、<code>read_files</code>関数では計算済みの値が無いため、正しく取得できていません。<p><img alt src=/img/2026/01-17-excel-read-files/05_formula_no_value.xlsx.png><pre><code class="language-sql hljs"><span class=hljs-keyword>SELECT</span>
+  <span class=hljs-operator>*</span>
+<span class=hljs-keyword>FROM</span>
+  read_files(
+    "/Volumes/excel_read_files/default/files/05_formula_no_value.xlsx",
+    format <span class=hljs-operator>=</span><span class=hljs-operator>></span> "excel",
+    schemaEvolutionMode <span class=hljs-operator>=</span><span class=hljs-operator>></span> "none"
+  )
+</code></pre><p><img alt src=/img/2026/01-17-excel-read-files/output_08.png><h3>複数のファイル</h3><p>問題ないとは思いますが、念のため複数のファイルの読み込みを試してみます。<p>以下のようなコードで100行×100ファイルのExcelを生成して読み込んでみます。<pre><code class="language-python hljs"><span class=hljs-keyword>import</span> random
+<span class=hljs-keyword>import</span> string
+
+<span class=hljs-keyword>import</span> openpyxl
+
+
+<span class=hljs-keyword>def</span> <span class="hljs-title function_">randomname</span>(<span class=hljs-params>n</span>):
+    <span class=hljs-keyword>return</span> <span class=hljs-string>""</span>.join(random.choices(string.ascii_letters + string.digits, k=n))
+
+
+<span class=hljs-keyword>def</span> <span class="hljs-title function_">main</span>():
+    <span class=hljs-keyword>for</span> i <span class=hljs-keyword>in</span> <span class=hljs-built_in>range</span>(<span class=hljs-number>1</span>, <span class=hljs-number>101</span>):
+        <span class=hljs-built_in>print</span>(<span class=hljs-string>f"06_excel_files\\book_<span class=hljs-subst>{i:<span class=hljs-number>0</span>><span class=hljs-number>3</span>}</span>.xlsx"</span>)
+        wb = openpyxl.Workbook()
+        sheet = wb.active
+
+        <span class=hljs-keyword>for</span> r <span class=hljs-keyword>in</span> <span class=hljs-built_in>range</span>(<span class=hljs-number>1</span>, <span class=hljs-number>101</span>):
+            sheet.cell(r, <span class=hljs-number>1</span>).value = i
+            sheet.cell(r, <span class=hljs-number>2</span>).value = r
+
+            <span class=hljs-keyword>for</span> c <span class=hljs-keyword>in</span> <span class=hljs-built_in>range</span>(<span class=hljs-number>3</span>, <span class=hljs-number>6</span>):
+                sheet.cell(r, c).value = randomname(<span class=hljs-number>10</span>)
+
+            <span class=hljs-keyword>for</span> c <span class=hljs-keyword>in</span> <span class=hljs-built_in>range</span>(<span class=hljs-number>6</span>, <span class=hljs-number>9</span>):
+                sheet.cell(r, c).value = random.randint(<span class=hljs-number>0</span>, <span class=hljs-number>100</span>)
+
+        wb.save(<span class=hljs-string>f"06_excel_files\\book_<span class=hljs-subst>{i:<span class=hljs-number>0</span>><span class=hljs-number>3</span>}</span>.xlsx"</span>)
+
+
+<span class=hljs-keyword>if</span> __name__ == <span class=hljs-string>"__main__"</span>:
+    main()
+</code></pre><pre><code class="language-sql hljs"><span class=hljs-keyword>SELECT</span>
+  <span class=hljs-operator>*</span>
+<span class=hljs-keyword>FROM</span>
+  read_files(
+    "/Volumes/excel_read_files/default/files/06_excel_files/",
+    format <span class=hljs-operator>=</span><span class=hljs-operator>></span> "excel",
+    schemaEvolutionMode <span class=hljs-operator>=</span><span class=hljs-operator>></span> "none"
+  )
+</code></pre><p><img alt src=/img/2026/01-17-excel-read-files/output_09.png><p>良さそうですね。<h3>サイズの大きいファイル</h3><p>JavaでExcelを読み書きする代表的なライブラリと言えば<a href=https://poi.apache.org/>Apache POI</a>があります。<p>POIはUser API（Excelファイルをインメモリで展開するAPI）で巨大なファイルを扱おうとするとOOMでプログラムが爆散するという悲しき事故が発生しがちです。<p>SparkはScala、すなわちJVMで動作するので同じ事故が発生するか否かは割と気になりますよね。<p>以下のようなコードでそれぞれの行数を持つExcelファイルを作って、順番に読み込ませてみます。<pre><code class="language-python hljs"><span class=hljs-keyword>import</span> random
+<span class=hljs-keyword>import</span> string
+
+<span class=hljs-keyword>import</span> openpyxl
+
+ROWS = [
+    <span class=hljs-number>10000</span>,
+    <span class=hljs-number>10100</span>,
+    <span class=hljs-number>10101</span>,
+    <span class=hljs-number>10102</span>,
+    <span class=hljs-number>10103</span>,
+    <span class=hljs-number>10104</span>,
+    <span class=hljs-number>10105</span>,
+    <span class=hljs-number>10106</span>,
+    <span class=hljs-number>10107</span>,
+    <span class=hljs-number>10108</span>,
+    <span class=hljs-number>10109</span>,
+    <span class=hljs-number>10110</span>,
+    <span class=hljs-number>10120</span>,
+    <span class=hljs-number>10130</span>,
+    <span class=hljs-number>10140</span>,
+    <span class=hljs-number>10150</span>,
+    <span class=hljs-number>10160</span>,
+    <span class=hljs-number>10170</span>,
+    <span class=hljs-number>10180</span>,
+    <span class=hljs-number>10190</span>,
+    <span class=hljs-number>10200</span>,
+    <span class=hljs-number>10300</span>,
+    <span class=hljs-number>10400</span>,
+    <span class=hljs-number>10500</span>,
+    <span class=hljs-number>11000</span>,
+]
+
+
+<span class=hljs-keyword>def</span> <span class="hljs-title function_">randomname</span>(<span class=hljs-params>n</span>):
+    <span class=hljs-keyword>return</span> <span class=hljs-string>""</span>.join(random.choices(string.ascii_letters + string.digits, k=n))
+
+
+<span class=hljs-keyword>def</span> <span class="hljs-title function_">main</span>():
+    <span class=hljs-keyword>for</span> row_count <span class=hljs-keyword>in</span> ROWS:
+        <span class=hljs-built_in>print</span>(<span class=hljs-string>f"07_large_excel_files\\book_<span class=hljs-subst>{row_count}</span>.xlsx"</span>)
+        wb = openpyxl.Workbook()
+        sheet = wb.active
+
+        <span class=hljs-keyword>for</span> r <span class=hljs-keyword>in</span> <span class=hljs-built_in>range</span>(<span class=hljs-number>1</span>, row_count + <span class=hljs-number>1</span>):
+            sheet.cell(r, <span class=hljs-number>1</span>).value = row_count
+            sheet.cell(r, <span class=hljs-number>2</span>).value = r
+
+            <span class=hljs-keyword>for</span> c <span class=hljs-keyword>in</span> <span class=hljs-built_in>range</span>(<span class=hljs-number>3</span>, <span class=hljs-number>6</span>):
+                sheet.cell(r, c).value = randomname(<span class=hljs-number>10</span>)
+
+            <span class=hljs-keyword>for</span> c <span class=hljs-keyword>in</span> <span class=hljs-built_in>range</span>(<span class=hljs-number>6</span>, <span class=hljs-number>9</span>):
+                sheet.cell(r, c).value = random.randint(<span class=hljs-number>0</span>, <span class=hljs-number>100</span>)
+
+        wb.save(<span class=hljs-string>f"07_large_excel_files\\book_<span class=hljs-subst>{row_count}</span>.xlsx"</span>)
+
+
+<span class=hljs-keyword>if</span> __name__ == <span class=hljs-string>"__main__"</span>:
+    main()
+</code></pre><p>詳細は省きますが、私の環境では10102行のファイルまでなら読み込んでくれましたが、10103行のファイルからは関数が返ってこなくなりました。<p>関数の内部的な制限に引っかかったのか、それともDatabricks Free Editionのなんらかのレートリミットに引っかかったのかは分かりませんが、あまり大量の行数を有するファイルの読み込みには向かないようです。<h2>おわりに</h2><p>いくつか気になる点はありましたが、ベータ版の機能なのでGAまでには修正されると思います。<p>Pythonでロジックを書かなくてもいい感じにExcelファイルが読み込めると、ファイルサーバ内に眠っているExcelファイルのデータの利活用のハードルも低くなると思います。<p>GAが待ち遠しい機能ですね。<p><a href=https://github.com/jyuch/excel-read-files>jyuch / excel-read-files</a><h2>余談</h2><p><s>ファイルをドラッグアンドドロップでテーブルを作れる機能も内部的に<code>read_files</code>関数を使っているのか、現時点では同様に日本語のフリガナを拾ってしまいます。</s><p>こちらも解決済みです。やったぜ<p><img alt src=/img/2026/01-17-excel-read-files/gui_ingestion.png><p>おわり</div></article><hr><nav class=post-navigation><ul><li>← Previous: <a href=/posts/2025/12-31-look-back-2025/ rel=prev>2025年の振り返りとか</a></ul></nav></main><footer><div><a href=/feed.xml> <svg viewbox="0 0 16 16" height=16 width=16 xmlns=http://www.w3.org/2000/svg><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"></path><path d="M5.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-3-8.5a1 1 0 0 1 1-1c5.523 0 10 4.477 10 10a1 1 0 1 1-2 0 8 8 0 0 0-8-8 1 1 0 0 1-1-1zm0 4a1 1 0 0 1 1-1 6 6 0 0 1 6 6 1 1 0 1 1-2 0 4 4 0 0 0-4-4 1 1 0 0 1-1-1z"></path></svg> </a></div></footer>

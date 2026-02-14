@@ -1,0 +1,157 @@
+<!doctype html><html lang=ja><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0" name=viewport><title>PostgreSQL 18 の uuidv7 関数は単調性が保証されているから安心だねってお話 - レンコン畑でつかまえて</title><meta content="PostgreSQL 18 の uuidv7 関数で生成されるUUIDv7は単調性が保証されていることと、保証するメカニズムについて解説します。" name=description><link href=/pagefind/pagefind-ui.css rel=stylesheet><link href=/styles.css rel=stylesheet><link href=/feed.xml rel=alternate title=レンコン畑でつかまえて type=application/atom+xml><link href=/feed.json rel=alternate title=レンコン畑でつかまえて type=application/json><script src="https://www.googletagmanager.com/gtag/js?id=G-1F9LYQGGMB" async></script><script>window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-1F9LYQGGMB');</script><script src=/pagefind/pagefind-ui.js></script><script>window.addEventListener('DOMContentLoaded',()=>{new PagefindUI({"element":"#search","showImages":false,"excerptLength":0,"showEmptyFilters":true,"showSubResults":false,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"});});</script><body><nav class=navbar><a class=navbar-home href=/> <strong>レンコン畑でつかまえて</strong> </a><ul class=navbar-links><li><a href=/> Home </a><li><a href=/posts/> Archive </a><li><a href=https://about.jyuch.dev/> About Me </a></ul><div class=navbar-search><div id=search></div></div></nav><main class=body-post><article class=post data-pagefind-body><div class=post-header><h1 class=post-title>PostgreSQL 18 の uuidv7 関数は単調性が保証されているから安心だねってお話</h1><nav class=post-tags><a class=tag href=/tags/postgres/>postgres</a></nav><time datetime="2025-10-12 00:00:00" class=post-date> October 12th, 2025 </time></div><div class=post-body><h2>長いので先にまとめ</h2><ul><li>UUIDv7は<a href=https://datatracker.ietf.org/doc/html/rfc9562>RFC9562</a>上ではミリ秒精度のタイムスタンプを持つことを要求している<li>また、オプショナルとして<code>rand_a</code>及び<code>rand_b</code>の生成方法を工夫して単調増加を保証しても良いとされている<li>PostgreSQL 18 の<code>uuidv7()</code>関数はRFC9562のSection 6.2 Method 3で提案されているタイムスタンプをサブミリ秒まで拡張する方法で単調増加を保証している <ul><li>サブミリ秒レベルでタイムスタンプが衝突した場合は、最小精度でインクリメントすることでタイムスタンプの衝突を回避している</ul></ul><h2>はじめに</h2><p>最近リリースされたPostgreSQL 18 で UUIDv7 の生成がサポートされました。<p>個人的にはUUIDが生成順にソート可能になるうれしさがよく分からないのですが、いざ使うことになった際に困らないように調べてみることにしました。<h2>UUIDv7</h2><p>そもそも、UUIDv7はどのような構造をしているのでしょうか。<p><a href=https://datatracker.ietf.org/doc/html/rfc9562#name-uuid-version-7>5.7. UUID Version 7</a>からビットレイアウトを引用して確認してみましょう。<pre><code class="language-txt hljs language-plaintext">    0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                           unix_ts_ms                          |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |          unix_ts_ms           |  ver  |       rand_a          |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |var|                        rand_b                             |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                            rand_b                             |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+                   Figure 11: UUIDv7 Field and Bit Layout
+</code></pre><p>バージョン（<code>ver</code>）とバリアント（<code>var</code>）を除くと、以下の要素から構成されていることが分かります。<table><thead><tr><th style=text-align:left>フィールド<th style=text-align:left>説明<tbody><tr><td style=text-align:left><code>unix_ts_ms</code><td style=text-align:left>48ビットで表現されたミリ秒精度のUnixエポックタイムスタンプ<tr><td style=text-align:left><code>rand_a</code><td style=text-align:left>12ビットのランダムフィールド<tr><td style=text-align:left><code>rand_b</code><td style=text-align:left>62ビットのランダムフィールド</table><p>RFCが最低限求めている仕様では、タイムスタンプはミリ秒精度となっています。 そのため、同一ミリ秒内で複数回UUIDが生成された場合、生成された順序の並べ替えを保証出来なくなってしまいます。<p>そのため、<a href=https://datatracker.ietf.org/doc/html/rfc9562#name-monotonicity-and-counters>6.2. Monotonicity and Counters</a>では、高頻度でのUUIID生成環境下での単調増加性を保証するための方法が提案されています。<h2>PostgreSQL 18 の UUIDv7</h2><p>PostgreSQL 18 の<code>uuidv7()</code>関数はミリ秒タイムスタンプ + サブミリ秒タイムスタンプ + ランダム値で計算されていることが<a href=https://www.postgresql.org/docs/18/functions-uuid.html#FUNC_UUID_GEN_TABLE>ドキュメントに記載されています。</a><p>具体的には<code>uuid.c</code>の以下の<code>generate_uuidv7()</code>関数で実装されています。<pre><code class="language-c hljs"><span class=hljs-comment>/*
+ * Generate UUID version 7 per RFC 9562, with the given timestamp.
+ *
+ * UUID version 7 consists of a Unix timestamp in milliseconds (48 bits) and
+ * 74 random bits, excluding the required version and variant bits. To ensure
+ * monotonicity in scenarios of high-frequency UUID generation, we employ the
+ * method "Replace Leftmost Random Bits with Increased Clock Precision (Method 3)",
+ * described in the RFC. This method utilizes 12 bits from the "rand_a" bits
+ * to store a 1/4096 (or 2^12) fraction of sub-millisecond precision.
+ *
+ * unix_ts_ms is a number of milliseconds since start of the UNIX epoch,
+ * and sub_ms is a number of nanoseconds within millisecond. These values are
+ * used for time-dependent bits of UUID.
+ *
+ * NB: all numbers here are unsigned, unix_ts_ms cannot be negative per RFC.
+ */</span>
+<span class=hljs-type>static</span> <span class=hljs-type>pg_uuid_t</span> *
+<span class="hljs-title function_">generate_uuidv7</span><span class=hljs-params>(uint64 unix_ts_ms, uint32 sub_ms)</span>
+{
+	<span class=hljs-type>pg_uuid_t</span>  *uuid = palloc(UUID_LEN);
+	uint32		increased_clock_precision;
+
+	<span class=hljs-comment>/* Fill in time part */</span>
+	uuid->data[<span class=hljs-number>0</span>] = (<span class=hljs-type>unsigned</span> <span class=hljs-type>char</span>) (unix_ts_ms >> <span class=hljs-number>40</span>);
+	uuid->data[<span class=hljs-number>1</span>] = (<span class=hljs-type>unsigned</span> <span class=hljs-type>char</span>) (unix_ts_ms >> <span class=hljs-number>32</span>);
+	uuid->data[<span class=hljs-number>2</span>] = (<span class=hljs-type>unsigned</span> <span class=hljs-type>char</span>) (unix_ts_ms >> <span class=hljs-number>24</span>);
+	uuid->data[<span class=hljs-number>3</span>] = (<span class=hljs-type>unsigned</span> <span class=hljs-type>char</span>) (unix_ts_ms >> <span class=hljs-number>16</span>);
+	uuid->data[<span class=hljs-number>4</span>] = (<span class=hljs-type>unsigned</span> <span class=hljs-type>char</span>) (unix_ts_ms >> <span class=hljs-number>8</span>);
+	uuid->data[<span class=hljs-number>5</span>] = (<span class=hljs-type>unsigned</span> <span class=hljs-type>char</span>) unix_ts_ms;
+
+	<span class=hljs-comment>/*
+	 * sub-millisecond timestamp fraction (SUBMS_BITS bits, not
+	 * SUBMS_MINIMAL_STEP_BITS)
+	 */</span>
+	increased_clock_precision = (sub_ms * (<span class=hljs-number>1</span> &lt;&lt; SUBMS_BITS)) / NS_PER_MS;
+
+	<span class=hljs-comment>/* Fill the increased clock precision to "rand_a" bits */</span>
+	uuid->data[<span class=hljs-number>6</span>] = (<span class=hljs-type>unsigned</span> <span class=hljs-type>char</span>) (increased_clock_precision >> <span class=hljs-number>8</span>);
+	uuid->data[<span class=hljs-number>7</span>] = (<span class=hljs-type>unsigned</span> <span class=hljs-type>char</span>) (increased_clock_precision);
+
+	<span class=hljs-comment>/* fill everything after the increased clock precision with random bytes */</span>
+	<span class=hljs-keyword>if</span> (!pg_strong_random(&uuid->data[<span class=hljs-number>8</span>], UUID_LEN - <span class=hljs-number>8</span>))
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg(<span class=hljs-string>"could not generate random values"</span>)));
+
+<span class=hljs-meta>#<span class=hljs-keyword>if</span> SUBMS_MINIMAL_STEP_BITS == 10</span>
+
+	<span class=hljs-comment>/*
+	 * On systems that have only 10 bits of sub-ms precision,  2 least
+	 * significant are dependent on other time-specific bits, and they do not
+	 * contribute to uniqueness. To make these bit random we mix in two bits
+	 * from CSPRNG. SUBMS_MINIMAL_STEP is chosen so that we still guarantee
+	 * monotonicity despite altering these bits.
+	 */</span>
+	uuid->data[<span class=hljs-number>7</span>] = uuid->data[<span class=hljs-number>7</span>] ^ (uuid->data[<span class=hljs-number>8</span>] >> <span class=hljs-number>6</span>);
+<span class=hljs-meta>#<span class=hljs-keyword>endif</span></span>
+
+	<span class=hljs-comment>/*
+	 * Set magic numbers for a "version 7" (pseudorandom) UUID and variant,
+	 * see https://www.rfc-editor.org/rfc/rfc9562#name-version-field
+	 */</span>
+	uuid_set_version(uuid, <span class=hljs-number>7</span>);
+
+	<span class=hljs-keyword>return</span> uuid;
+}
+</code></pre><p>詳しくは実装を読んでもらえればと思いますが、<code>rand_a</code>フィールドの12bitにナノ秒（Linux）を埋め込むか、マイクロ秒 + ランダム値（Windows・mac）を埋め込んでいます。<p>また、現在時刻を供給している<code>get_real_time_ns_ascending()</code>関数内で、前回との時刻の差分が<code>rand_a</code>フィールドに埋め込むタイムスタンプの精度以下の場合は、最小精度（Linuxの場合は245マイクロ秒）を加算することでサブミリ秒内でタイムスタンプが衝突することを防いでいます。<pre><code class="language-c hljs"><span class=hljs-comment>/*
+ * Get the current timestamp with nanosecond precision for UUID generation.
+ * The returned timestamp is ensured to be at least SUBMS_MINIMAL_STEP greater
+ * than the previous returned timestamp (on this backend).
+ */</span>
+<span class=hljs-type>static</span> <span class=hljs-keyword>inline</span> int64
+<span class="hljs-title function_">get_real_time_ns_ascending</span><span class=hljs-params>()</span>
+{
+	<span class=hljs-type>static</span> int64 previous_ns = <span class=hljs-number>0</span>;
+	int64		ns;
+
+	<span class=hljs-comment>/* Get the current real timestamp */</span>
+
+<span class=hljs-meta>#<span class=hljs-keyword>ifdef</span>	_MSC_VER</span>
+	<span class=hljs-class><span class=hljs-keyword>struct</span> <span class=hljs-title>timeval</span> <span class=hljs-title>tmp</span>;</span>
+
+	gettimeofday(&tmp, <span class=hljs-literal>NULL</span>);
+	ns = tmp.tv_sec * NS_PER_S + tmp.tv_usec * NS_PER_US;
+<span class=hljs-meta>#<span class=hljs-keyword>else</span></span>
+	<span class=hljs-class><span class=hljs-keyword>struct</span> <span class=hljs-title>timespec</span> <span class=hljs-title>tmp</span>;</span>
+
+	<span class=hljs-comment>/*
+	 * We don't use gettimeofday(), instead use clock_gettime() with
+	 * CLOCK_REALTIME where available in order to get a high-precision
+	 * (nanoseconds) real timestamp.
+	 *
+	 * Note while a timestamp returned by clock_gettime() with CLOCK_REALTIME
+	 * is nanosecond-precision on most Unix-like platforms, on some platforms
+	 * such as macOS it's restricted to microsecond-precision.
+	 */</span>
+	clock_gettime(CLOCK_REALTIME, &tmp);
+	ns = tmp.tv_sec * NS_PER_S + tmp.tv_nsec;
+<span class=hljs-meta>#<span class=hljs-keyword>endif</span></span>
+
+	<span class=hljs-comment>/* Guarantee the minimal step advancement of the timestamp */</span>
+	<span class=hljs-keyword>if</span> (previous_ns + SUBMS_MINIMAL_STEP_NS >= ns)
+		ns = previous_ns + SUBMS_MINIMAL_STEP_NS;
+	previous_ns = ns;
+
+	<span class=hljs-keyword>return</span> ns;
+}
+</code></pre><p>そのため、実用的かどうかと言われるとｱﾚですが、<code>uuidv7()</code>関数で生成されたUUIDv7からサブミリ秒のタイムスタンプを抽出することが出来ます。<pre><code class="language-rust hljs"><span class=hljs-comment>// サブミリ秒が12ビットで供給されている環境用</span>
+<span class=hljs-keyword>fn</span> <span class="hljs-title function_">uuidv7_to_timestamp</span>(uuidv7: &<span class=hljs-type>str</span>) <span class=hljs-punctuation>-></span> (<span class=hljs-type>i64</span>, <span class=hljs-type>i64</span>) {
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>uuid</span> = uuidv7.<span class="hljs-title function_ invoke__">replace</span>(<span class=hljs-string>"-"</span>, <span class=hljs-string>""</span>);
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>uuid</span> = <span class=hljs-type>u128</span>::<span class="hljs-title function_ invoke__">from_str_radix</span>(&*uuid, <span class=hljs-number>16</span>).<span class="hljs-title function_ invoke__">unwrap</span>();
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>ms</span> = (uuid >> <span class=hljs-number>80</span>) <span class=hljs-keyword>as</span> <span class=hljs-type>i64</span>;
+
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>uuid</span> = uuid.<span class="hljs-title function_ invoke__">to_be_bytes</span>();
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>increased_clock_precision</span> = (((uuid[<span class=hljs-number>6</span>] & <span class=hljs-number>0x0fu8</span>) <span class=hljs-keyword>as</span> <span class=hljs-type>i64</span>) &lt;&lt; <span class=hljs-number>8</span>) | uuid[<span class=hljs-number>7</span>] <span class=hljs-keyword>as</span> <span class=hljs-type>i64</span>;
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>ns</span> = increased_clock_precision * SUBMS_MINIMAL_STEP_NS;
+
+    (ms, ns)
+}
+</code></pre><p><a href=https://github.com/jyuch/pg-uuidv7-to-timestamp>jyuch/pg-uuidv7-to-timestamp</a><h2>PostgreSQL 18 でのUUIDv7生成例</h2><p>最後に実際に<code>uuidv7()</code>関数を使ってUUIDv7を生成して、単調増加しているかを確認してみましょう。<p>以下のようなテーブルを作成したうえで、<pre><code class="language-sql hljs"><span class=hljs-keyword>create table</span> uuidv7_test_table
+(
+    i     <span class=hljs-type>int</span>,
+    clock <span class=hljs-type>timestamp</span>,
+    <span class=hljs-keyword>value</span> uuid
+);
+</code></pre><p>以下のクエリで全力でUUIDv7を生成します。<pre><code class="language-sql hljs"><span class=hljs-keyword>begin</span> transaction;
+do
+$do$
+  <span class=hljs-keyword>begin</span>
+    <span class=hljs-keyword>for</span> i <span class=hljs-keyword>in</span> <span class=hljs-number>1.</span><span class=hljs-number>.1000000</span>
+      loop
+        <span class=hljs-keyword>insert into</span> uuidv7_test_table(i, clock, <span class=hljs-keyword>value</span>) 
+        <span class=hljs-keyword>values</span> (i, clock_timestamp(), uuidv7());
+      <span class=hljs-keyword>end</span> loop;
+    <span class=hljs-keyword>end</span>
+$do$;
+<span class=hljs-keyword>end</span>;
+</code></pre><p>すると、以下のような結果となります。 上記の<code>uuidv7_to_timestamp()</code>の結果を併記しています。<pre><code class="language-sql hljs"><span class=hljs-keyword>select</span> i, <span class=hljs-keyword>value</span>, uuid_extract_timestamp(<span class=hljs-keyword>value</span>), clock
+<span class=hljs-keyword>from</span> uuidv7_test_table
+<span class=hljs-keyword>order</span> <span class=hljs-keyword>by</span> <span class=hljs-keyword>value</span>;
+</code></pre><table><thead><tr><th style=text-align:left>i<th style=text-align:left>value<th style=text-align:left>uuid_extract_timestamp<th style=text-align:left>clock<th style=text-align:left>uuidv7_to_timestamp<tbody><tr><td style=text-align:left>1<td style=text-align:left>0199d67d-81a7-713d-aed5-6bbd22a476c2<td style=text-align:left>2025-10-12 03:36:13.479000 +00:00<td style=text-align:left>2025-10-12 03:36:13.479071<td style=text-align:left>2025-10-12 03:36:13.479 UTC 77665<tr><td style=text-align:left>2<td style=text-align:left>0199d67d-81a7-7be4-ba18-b1d95ac5835f<td style=text-align:left>2025-10-12 03:36:13.479000 +00:00<td style=text-align:left>2025-10-12 03:36:13.479741<td style=text-align:left>2025-10-12 03:36:13.479 UTC 745780<tr><td style=text-align:left>3<td style=text-align:left>0199d67d-81a7-7c31-9ca1-df81b59c2e69<td style=text-align:left>2025-10-12 03:36:13.479000 +00:00<td style=text-align:left>2025-10-12 03:36:13.479762<td style=text-align:left>2025-10-12 03:36:13.479 UTC 764645<tr><td style=text-align:left>4<td style=text-align:left>0199d67d-81a7-7c45-b183-8ebf38326e24<td style=text-align:left>2025-10-12 03:36:13.479000 +00:00<td style=text-align:left>2025-10-12 03:36:13.479766<td style=text-align:left>2025-10-12 03:36:13.479 UTC 769545<tr><td style=text-align:left>5<td style=text-align:left>0199d67d-81a7-7c55-893a-c1685851f5f7<td style=text-align:left>2025-10-12 03:36:13.479000 +00:00<td style=text-align:left>2025-10-12 03:36:13.479770<td style=text-align:left>2025-10-12 03:36:13.479 UTC 773465</table><p><code>uuid_extract_timestamp</code>関数がミリ秒までの精度しか返していませんが、仕様上はミリ秒精度があれば良いとされていることと、外部で生成されたUUIDv7でも対応できるようにこのようになっています。<p>おわり</div></article><hr><nav class=post-navigation><ul><li>← Previous: <a href=/posts/2025/10-11-build-postgresql-18/ rel=prev>PostgreSQL 18 をソースコードからビルドしたい</a><li><strong>Next: <a href=/posts/2025/10-26-improve-precision-using-dspy/ rel=next>DSPyを使用してLLMを使ったレシートの読み取り精度を向上させたい</a> →</strong></ul></nav></main><footer><div><a href=/feed.xml> <svg viewbox="0 0 16 16" height=16 width=16 xmlns=http://www.w3.org/2000/svg><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"></path><path d="M5.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-3-8.5a1 1 0 0 1 1-1c5.523 0 10 4.477 10 10a1 1 0 1 1-2 0 8 8 0 0 0-8-8 1 1 0 0 1-1-1zm0 4a1 1 0 0 1 1-1 6 6 0 0 1 6 6 1 1 0 1 1-2 0 4 4 0 0 0-4-4 1 1 0 0 1-1-1z"></path></svg> </a></div></footer>
