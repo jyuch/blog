@@ -1,0 +1,50 @@
+<!doctype html><html lang=ja><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0" name=viewport><title>k3sでもBuildKitを使用してイメージをビルドしたい - レンコン畑でつかまえて</title><meta content=k3s上でBuildKitを使用してコンテナイメージをビルドする方法を確認します name=description><link href=/pagefind/pagefind-ui.css rel=stylesheet><link href=/styles.css rel=stylesheet><link href=/feed.xml rel=alternate title=レンコン畑でつかまえて type=application/atom+xml><link href=/feed.json rel=alternate title=レンコン畑でつかまえて type=application/json><script src="https://www.googletagmanager.com/gtag/js?id=G-1F9LYQGGMB" async></script><script>window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-1F9LYQGGMB');</script><script src=/pagefind/pagefind-ui.js></script><script>window.addEventListener('DOMContentLoaded',()=>{new PagefindUI({"element":"#search","showImages":false,"excerptLength":0,"showEmptyFilters":true,"showSubResults":false,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"});});</script><body><nav class=navbar><a class=navbar-home href=/> <strong>レンコン畑でつかまえて</strong> </a><ul class=navbar-links><li><a href=/> Home </a><li><a href=/posts/> Archive </a><li><a href=https://about.jyuch.dev/> About Me </a></ul><div class=navbar-search><div id=search></div></div></nav><main class=body-post><article class=post data-pagefind-body><div class=post-header><h1 class=post-title>k3sでもBuildKitを使用してイメージをビルドしたい</h1><nav class=post-tags><a class=tag href=/tags/k8s/>k8s</a><a class=tag href=/tags/k3s/>k3s</a></nav><time datetime="2022-11-12 00:00:00" class=post-date> November 12th, 2022 </time></div><div class=post-body><h2>はじめに</h2><p>家で運用しているサーバ機<s>をアップデートに失敗して吹き飛ばした</s>とある事情で空いたので、k3sをインストールしました。<p>せっかく？なので、k3s上でイメージをビルドできるようにしておくとなんか捗りそうな気がするので方法を確認しておきます。<h2>Dockerfileの準備</h2><p>とりあえずサクッとRustでマルチステージビルドを行うDockerfileを用意します。<p><a href=https://github.com/jyuch/rust-multistage-build>jyuch/rust-multistage-build</a><pre><code class="language-dockerfile hljs"><span class=hljs-keyword>FROM</span> rust:<span class=hljs-number>1.65</span>.<span class=hljs-number>0</span>-bullseye AS builder
+
+<span class=hljs-keyword>ADD</span><span class=language-bash> . /src</span>
+<span class=hljs-keyword>WORKDIR</span><span class=language-bash> /src</span>
+<span class=hljs-keyword>RUN</span><span class=language-bash> --mount=<span class=hljs-built_in>type</span>=cache,target=/usr/local/cargo/registry \
+    cargo build --release</span>
+
+<span class=hljs-keyword>FROM</span> gcr.io/distroless/cc
+
+<span class=hljs-keyword>COPY</span><span class=language-bash> --from=builder /src/target/release/ferris_says ferris_says</span>
+<span class=hljs-keyword>CMD</span><span class=language-bash> [<span class=hljs-string>"./ferris_says"</span>]</span>
+</code></pre><p>とりあえずDockerのBuildKitでビルドできるか確認しておきます。<pre><code class="language-sh hljs language-bash">$ docker buildx build -t ferris_says:latest .
+</code></pre><p>実行するとこんな感じです。<pre><code class="language-sh hljs language-bash">$ docker run --<span class=hljs-built_in>rm</span> -it ferris_says:latest
+ __________________________
+&lt; Hello fellow Rustaceans! >
+ --------------------------
+        \
+         \
+            _~^~^~_
+        \) /  o o  \ (/
+          <span class=hljs-string>'_   -   _'</span>
+          / <span class=hljs-string>'-----'</span> \
+</code></pre><h2>k3s側のビルド用のPodの用意</h2><p>k3s側でビルドするのに必要なマニフェストはBuildKit側で用意してくれていたのでそれをそのまま使用します。<p><a href=https://github.com/moby/buildkit/tree/master/examples/kubernetes>Kubernetes manifests for BuildKit</a><p>今回はとりあえずPodで生やします。<pre><code class="language-sh hljs language-bash">$ kubectl apply -f pod.rootless.yaml
+</code></pre><pre><code class="language-sh hljs language-bash">$ kubectl get pods
+NAME        READY   STATUS    RESTARTS   AGE
+buildkitd   1/1     Running   0          124m
+</code></pre><h2>BuildKitを使用してのビルド</h2><p><code>buildctl</code>を使用してビルドをします。<pre><code class="language-sh hljs language-bash">buildctl --addr kube-pod://buildkitd build \
+  --frontend dockerfile.v0 \
+  --<span class=hljs-built_in>local</span> context=. \
+  --<span class=hljs-built_in>local</span> dockerfile=. \
+  --output <span class=hljs-built_in>type</span>=oci,name=ferris_says:latest > ferris_says.tar
+</code></pre><p>ビルドがうまくいくとイメージがtarに詰まって出てくるので、あとはそれをk3sに突っ込むだけです。<pre><code class="language-sh hljs language-bash">$ <span class=hljs-built_in>sudo</span> k3s ctr images import ferris_says.tar
+</code></pre><pre><code class="language-sh hljs language-bash">$ <span class=hljs-built_in>sudo</span> k3s crictl images                                                               
+IMAGE                                        TAG                    IMAGE ID            SIZE
+docker.io/library/ferris_says                latest                 7948ed6b9ec95       10.6MB
+</code></pre><p>ここまで来ればあとはイメージを動かすだけです。<p>この時、<code>--image-pull-policy=Never</code>を指定してイメージをプルしないようにしないとイメージ取得で詰まっていい感じに動いてくれません。<pre><code class="language-sh hljs language-bash">$ kubectl run ferris-says --restart=Never --image=docker.io/library/ferris_says:latest --<span class=hljs-built_in>rm</span> -it --image-pull-policy=Never
+ __________________________
+&lt; Hello fellow Rustaceans! >
+ --------------------------
+        \
+         \
+            _~^~^~_
+        \) /  o o  \ (/
+          <span class=hljs-string>'_   -   _'</span>
+          / <span class=hljs-string>'-----'</span> \
+pod <span class=hljs-string>"ferris-says"</span> deleted
+</code></pre><p>おわり</div></article><hr><nav class=post-navigation><ul><li>← Previous: <a href=/posts/2022/blog-move-from-hatena-to-github-page/ rel=prev>ブログをはてなからGithub Pageに移したお話</a><li><strong>Next: <a href=/posts/2022/use-mirror-repository-in-k3s/ rel=next>k3sでもローカルなDockerリポジトリを使用したい</a> →</strong></ul></nav></main><footer><div><a href=/feed.xml> <svg viewbox="0 0 16 16" height=16 width=16 xmlns=http://www.w3.org/2000/svg><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"></path><path d="M5.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-3-8.5a1 1 0 0 1 1-1c5.523 0 10 4.477 10 10a1 1 0 1 1-2 0 8 8 0 0 0-8-8 1 1 0 0 1-1-1zm0 4a1 1 0 0 1 1-1 6 6 0 0 1 6 6 1 1 0 1 1-2 0 4 4 0 0 0-4-4 1 1 0 0 1-1-1z"></path></svg> </a></div></footer>
