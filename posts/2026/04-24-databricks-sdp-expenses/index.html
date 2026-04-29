@@ -1,0 +1,119 @@
+<!doctype html><html lang=ja><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0" name=viewport><title>DatabricksのSpark Declarative Pipelinesを使って簡易的な家計簿を作りたい - レンコン畑でつかまえて</title><meta content="Databricks Spark Declarative PipelinesとAI関数を使ってレシートのOCRと情報の抽出を行うパイプラインを実装します。" name=description><link href=/pagefind/pagefind-ui.css rel=stylesheet><link href=/styles.css rel=stylesheet><link href=/feed.xml rel=alternate title=レンコン畑でつかまえて type=application/atom+xml><link href=/feed.json rel=alternate title=レンコン畑でつかまえて type=application/json><script src="https://www.googletagmanager.com/gtag/js?id=G-1F9LYQGGMB" async></script><script>window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-1F9LYQGGMB');</script><script src=/pagefind/pagefind-ui.js></script><script>window.addEventListener('DOMContentLoaded',()=>{new PagefindUI({"element":"#search","showImages":false,"excerptLength":0,"showEmptyFilters":true,"showSubResults":false,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"});});</script><body><nav class=navbar><a class=navbar-home href=/> <strong>レンコン畑でつかまえて</strong> </a><ul class=navbar-links><li><a href=/> Home </a><li><a href=/posts/> Archive </a><li><a href=https://about.jyuch.dev/> About Me </a></ul><div class=navbar-search><div id=search></div></div></nav><main class=body-post><article class=post data-pagefind-body><div class=post-header><h1 class=post-title>DatabricksのSpark Declarative Pipelinesを使って簡易的な家計簿を作りたい</h1><nav class=post-tags><a class=tag href=/tags/databricks/>databricks</a></nav><time datetime="2026-04-29 00:00:00" class=post-date> April 29th, 2026 </time></div><div class=post-body><h2>はじめに</h2><p>Databricksには<a href=https://docs.databricks.com/aws/ja/large-language-models/ai-functions>AI Functions</a>があり、ノートブックやSQL Editorなどで使用できます。<p>いつからかSpark Declarative Pipelinesでも使えるようになっており、パイプラインだけでOCRと抽出が完結できるようになっていました。<p>そこで、今回はボリュームに格納されたレシートから日時と金額を抽出してダッシュボードに表示するまでの処理をSpark Declarative Pipelinesで実装して、Declarative Automation Bundlesでデプロイできるようにしてみました。<p><a href=https://github.com/jyuch/public-expenses>jyuch/public-expenses</a><h2>パイプラインの実装</h2><p>以下の流れのパイプラインを実装します。<ol><li>Volumeからレシートのイメージをロード<li><code>ai_parse_document</code>でOCR処理を実行<li><code>ai_query</code>で抽出結果を構造化<li>構造化データをフラット化してシルバーテーブルに変換</ol><p>基本的に<code>ai_〇〇</code>は実行にまぁまぁの時間が掛かるので、毎回全部のイメージの再処理をしていたら実行時間がとんでもないことになります。 そのため、ストリーミングテーブルを使用して差分実行を行うようにします。<p>この辺も<code>CREATE STREAMING TABLE</code>と<code>STREAM()</code>でチェックポイントの管理をしなくても良きにしてくれるのでSDPは大好きです。<p>まずはVolumeに格納されているレシートのイメージをロードします。<pre><code class="language-sql hljs"><span class=hljs-keyword>CREATE</span> STREAMING <span class=hljs-keyword>TABLE</span> raw_receipts <span class=hljs-keyword>AS</span>
+<span class=hljs-keyword>SELECT</span>
+  path,
+  modificationTime,
+  length,
+  content
+<span class=hljs-keyword>FROM</span>
+  STREAM(READ_FILES(<span class=hljs-string>'/Volumes/expenses/default/receipt_images/'</span>, format <span class=hljs-operator>=</span><span class=hljs-operator>></span> <span class=hljs-string>'binaryFile'</span>));
+</code></pre><p>そうしたら、<code>ai_parse_document</code>でOCRを実行します。<pre><code class="language-sql hljs"><span class=hljs-keyword>CREATE</span> STREAMING <span class=hljs-keyword>TABLE</span> parsed_receipts <span class=hljs-keyword>AS</span>
+<span class=hljs-keyword>SELECT</span>
+  path,
+  modificationTime,
+  length,
+  content,
+  ai_parse_document(content, Map(<span class=hljs-string>'version'</span>, <span class=hljs-string>'2.0'</span>)) <span class=hljs-keyword>AS</span> parsed_receipt
+<span class=hljs-keyword>FROM</span>
+  STREAM(raw_receipts);
+</code></pre><p><code>ai_query</code>の<code>responseFormat</code>にJSON Schemaを指定して構造化出力を行わせます。 本当は<code>STRUCT&lt;></code>で構造体の定義を指定できるはずなのですが、「Spark Declarative Pipelinesのバグにエンカウントしたのでバグ報告ヨロ」みたいなエラーが表示されるので、あきらめてJSON Schemaを指定しています。<p>個人的にはJSON Schemaは書式が冗長なので、できれば<code>STRUCT&lt;></code>の方の構文を使いたいです。<pre><code class="language-sql hljs"><span class=hljs-keyword>CREATE</span> STREAMING <span class=hljs-keyword>TABLE</span> structured_receipts <span class=hljs-keyword>AS</span>
+<span class=hljs-keyword>SELECT</span>
+  path,
+  ai_query(
+    <span class=hljs-string>'databricks-qwen3-next-80b-a3b-instruct'</span>,
+    CONCAT(
+      <span class=hljs-string>'レシートをパースした結果が与えられます。そこから購入日と合計金額を抽出しなさい。'</span>,
+      parsed_receipt
+    ),
+    responseFormat <span class=hljs-operator>=</span><span class=hljs-operator>></span>
+      <span class=hljs-string>'{
+        "type": "json_schema",
+        "json_schema": {
+          "name": "structured_food_receipts",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "purchase_date": {
+                "type": "string",
+                "format": "date"
+              },
+              "total_amount": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "purchase_date",
+              "total_amount"
+            ]
+          },
+          "strict": true
+        }
+      }'</span>
+  ) <span class=hljs-keyword>AS</span> structured_receipt
+<span class=hljs-keyword>FROM</span>
+  STREAM(parsed_receipts);
+</code></pre><p>抽出したパスからレシートの種類（食費とか日用品とか）を付与しています。また、JSON形式の文字列から<code>STRUCT&lt;></code>に変換します。<p>購入日とかを抽出するタイミングでカテゴライズをしてもいいのですが、精度が出なかったのでひとまずファイルパスで識別させています。<pre><code class="language-sql hljs"><span class=hljs-keyword>CREATE</span> STREAMING <span class=hljs-keyword>TABLE</span> flatten_receipts <span class=hljs-keyword>AS</span>
+<span class=hljs-keyword>SELECT</span>
+  path,
+  regexp_extract(path, <span class=hljs-string>'/([^/]+)/[^/]+$'</span>, <span class=hljs-number>1</span>) <span class=hljs-keyword>AS</span> kind,
+  try_cast(
+    try_parse_json(structured_receipt) <span class=hljs-keyword>AS</span> STRUCT<span class=hljs-operator>&lt;</span>purchase_date <span class=hljs-type>DATE</span>, total_amount <span class=hljs-type>INT</span><span class=hljs-operator>></span>
+  ) <span class=hljs-keyword>AS</span> receipt
+<span class=hljs-keyword>FROM</span>
+  STREAM(structured_receipts);
+</code></pre><p>最後にフラット化すればひとまずは家計簿テーブルが完成します。 名前とやっていることが微妙に一致してませんが、まぁ、その・・・。<pre><code class="language-sql hljs"><span class=hljs-keyword>CREATE</span> <span class=hljs-keyword>OR</span> REPLACE MATERIALIZED <span class=hljs-keyword>VIEW</span> receipts <span class=hljs-keyword>AS</span>
+<span class=hljs-keyword>SELECT</span>
+  path,
+  kind,
+  receipt.purchase_date,
+  receipt.total_amount
+<span class=hljs-keyword>FROM</span>
+  flatten_receipts;
+</code></pre><h2>DABでの展開</h2><p>パイプラインを手動でデプロイしてもいいのですが、全部自動でできた方がうれしいですよね。<p>ということでDABで一発デプロイできるようにします。<p>特にひねりのない<code>databricks.yml</code>と<code>resources/expenses.pipeline.yml</code>を定義します。<pre><code class="language-yaml hljs"><span class=hljs-attr>bundle:</span>
+  <span class=hljs-attr>name:</span> <span class=hljs-string>expenses</span>
+  <span class=hljs-attr>uuid:</span> <span class=hljs-number>00000000</span><span class=hljs-number>-0000</span><span class=hljs-number>-0000</span><span class=hljs-number>-0000</span><span class=hljs-number>-000000000000</span>
+
+<span class=hljs-attr>include:</span>
+  <span class=hljs-bullet>-</span> <span class=hljs-string>resources/*.yml</span>
+
+<span class=hljs-attr>variables:</span>
+  <span class=hljs-attr>catalog:</span>
+    <span class=hljs-attr>description:</span> <span class=hljs-string>The</span> <span class=hljs-string>catalog</span> <span class=hljs-string>to</span> <span class=hljs-string>use</span>
+  <span class=hljs-attr>schema:</span>
+    <span class=hljs-attr>description:</span> <span class=hljs-string>The</span> <span class=hljs-string>schema</span> <span class=hljs-string>to</span> <span class=hljs-string>use</span>
+  <span class=hljs-attr>ingest_from:</span>
+    <span class=hljs-attr>description:</span> <span class=hljs-string>The</span> <span class=hljs-string>path</span> <span class=hljs-string>log</span> <span class=hljs-string>ingestion</span>
+
+<span class=hljs-attr>targets:</span>
+  <span class=hljs-attr>dev:</span>
+    <span class=hljs-attr>mode:</span> <span class=hljs-string>development</span>
+    <span class=hljs-attr>default:</span> <span class=hljs-literal>true</span>
+    <span class=hljs-attr>variables:</span>
+      <span class=hljs-attr>catalog:</span> <span class=hljs-string>expenses</span>
+      <span class=hljs-attr>schema:</span> <span class=hljs-string>dev</span>
+  <span class=hljs-attr>prod:</span>
+    <span class=hljs-attr>mode:</span> <span class=hljs-string>production</span>
+    <span class=hljs-attr>workspace:</span>
+      <span class=hljs-attr>root_path:</span> <span class=hljs-string>/Workspace/Bundles/${bundle.name}/${bundle.target}</span>
+    <span class=hljs-attr>variables:</span>
+      <span class=hljs-attr>catalog:</span> <span class=hljs-string>expenses</span>
+      <span class=hljs-attr>schema:</span> <span class=hljs-string>prod</span>
+</code></pre><pre><code class="language-yaml hljs"><span class=hljs-attr>resources:</span>
+  <span class=hljs-attr>pipelines:</span>
+    <span class=hljs-attr>expenses:</span>
+      <span class=hljs-attr>name:</span> <span class=hljs-string>expenses</span>
+      <span class=hljs-attr>catalog:</span> <span class=hljs-string>${var.catalog}</span>
+      <span class=hljs-attr>schema:</span> <span class=hljs-string>${var.schema}</span>
+      <span class=hljs-attr>serverless:</span> <span class=hljs-literal>true</span>
+      <span class=hljs-attr>root_path:</span> <span class=hljs-string>"../src/expenses"</span>
+
+      <span class=hljs-attr>libraries:</span>
+        <span class=hljs-bullet>-</span> <span class=hljs-attr>glob:</span>
+            <span class=hljs-attr>include:</span> <span class=hljs-string>../src/expenses/transformations/**</span>
+
+      <span class=hljs-attr>environment:</span>
+        <span class=hljs-attr>dependencies:</span>
+          <span class=hljs-bullet>-</span> <span class=hljs-string>--editable</span> <span class=hljs-string>${workspace.file_path}</span>
+</code></pre><p>あとは🚀ボタンで一発デプロイです。<h2>ダッシュボードの作成</h2><p>あとはお好みの種類のグラフでダッシュボードを作るだけです。<p>ダッシュボードもDABでデプロイ出来ます。 お仕事ではダッシュボードもパイプラインと同じようにDABでデプロイしているのですが、小回りが利かなくなるので趣味ならこの辺はお好みでいいと思います。<h2>おわりに</h2><p>SQLだけでレシートのOCR ⇒ 情報の抽出が完結しました。 また、差分更新も勝手にやってくれます。<p>宣言的に実装からデプロイまでできるので管理しやすいです。皆様のお仕事のお供のぜひぜひ<p>おわり</div></article><hr><nav class=post-navigation><ul><li>← Previous: <a href=/posts/2026/04-04-databricks-zerobus/ rel=prev>Databricks Zerobus Ingestでサーバレスでリアルタイムにデータを流し込みたかった</a></ul></nav></main><footer><div><a href=/feed.xml> <svg viewbox="0 0 16 16" height=16 width=16 xmlns=http://www.w3.org/2000/svg><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"></path><path d="M5.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-3-8.5a1 1 0 0 1 1-1c5.523 0 10 4.477 10 10a1 1 0 1 1-2 0 8 8 0 0 0-8-8 1 1 0 0 1-1-1zm0 4a1 1 0 0 1 1-1 6 6 0 0 1 6 6 1 1 0 1 1-2 0 4 4 0 0 0-4-4 1 1 0 0 1-1-1z"></path></svg> </a></div></footer>
