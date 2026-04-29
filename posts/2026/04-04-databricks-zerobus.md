@@ -2,7 +2,7 @@
 title: Databricks Zerobus Ingestでサーバレスでリアルタイムにデータを流し込みたかった
 description: Databricks Zerobus Ingestでデータを流し込みたかったのですが、デフォルトストレージではだめでした。
 date: 2026-04-04
-lastModified: 2026-04-4
+lastModified: 2026-04-04
 tags: 
   - rust
   - databricks
