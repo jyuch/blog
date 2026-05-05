@@ -1,0 +1,49 @@
+<!doctype html><html lang=ja><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0" name=viewport><title>WindowsでもOpenJDKを野良ビルドしたい - レンコン畑でつかまえて</title><meta content=ソースコードからOpenJDKをビルドする方法を確認します name=description><link href=/pagefind/pagefind-ui.css rel=stylesheet><link href=/styles.css rel=stylesheet><link href=/feed.xml rel=alternate title=レンコン畑でつかまえて type=application/atom+xml><link href=/feed.json rel=alternate title=レンコン畑でつかまえて type=application/json><script src="https://www.googletagmanager.com/gtag/js?id=G-1F9LYQGGMB" async></script><script>window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-1F9LYQGGMB');</script><script src=/pagefind/pagefind-ui.js></script><script>window.addEventListener('DOMContentLoaded',()=>{new PagefindUI({"element":"#search","showImages":false,"excerptLength":0,"showEmptyFilters":true,"showSubResults":false,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"});});</script><body><nav class=navbar><a class=navbar-home href=/> <strong>レンコン畑でつかまえて</strong> </a><ul class=navbar-links><li><a href=/> Home </a><li><a href=/posts/> Archive </a><li><a href=https://about.jyuch.dev/> About Me </a></ul><div class=navbar-search><div id=search></div></div></nav><main class=body-post><article class=post data-pagefind-body><div class=post-header><h1 class=post-title>WindowsでもOpenJDKを野良ビルドしたい</h1><nav class=post-tags><a class=tag href=/tags/jdk/>jdk</a></nav><time datetime="2024-12-20 00:00:00" class=post-date> December 20th, 2024 </time></div><div class=post-body><h2>はじめに</h2><p>OpenJDKの中身をいじって検証する必要があったので、WindowsでOpenJDKを野良ビルドする方法を確認してみました。<p>最新のバージョンなら<a href=https://openjdk.org/groups/build/doc/building.html>OpenJDKの公式Wikiのビルドのページ</a>を参照すればいいですが、古いバージョンはリポジトリ内の<code>docs</code>フォルダの中身を確認する必要があります。（1敗）<p>また、基本的にバージョンが下るほどビルド難易度が上がっていきます。<p>古いバージョンだと過去のVisual StudioとかWindowsバージョンが必要っぽいですが、流石に個人でVisual Studio Subscriptionを契約していないので基本的にWindows 11 + Visual Studio 2022でビルドしていきます。<h2>必要なもの</h2><p>OpenJDKの公式リファレンス曰く、英語版のWindowsのみを公式でサポートしているらしいです。 そのため、何らかの合法的な手段で英語版のWindowsを調達するか、ロケールを英語に変更してください。<p>そうしたら以下の開発ツールをインストールします。<ul><li>Visual Studio 2022 <ul><li>「Desktop development with C++」ワークロード</ul><li>Cygwin <ul><li>autoconf<li>make<li>zip<li>unzip</ul><li>git（GitHubからソースをクローンしてくるなら）<li>ビルド済みのJDK（ビルドしたいOpenJDKのバージョンかその一つ前のバージョン）<li>JTReg（リグレッションテストを回すなら）<li>googletest（hotspotのテストを回すなら）</ul><p>ソースをzipで落としてくるのであれば、ファイル数がとても多いので7zipなどのアーカイバを使って解凍したほうがいいかもしれません。<h2>ビルド</h2><p>どのバージョンでも<code>build\windows-x86_64-server-release\jdk</code>にバイナリが吐かれています。<p>大体どのバージョンでも手元のマシンだとビルドで30分位、<code>test-tier1</code>で2時間位掛かるのでゆっくりしていってね！！！<p>あと、ビルドに時間が掛かるからって調子に乗って複数バージョンの同時ビルドを流すと、たまにテストがタイムアウトしてError扱いになるので注意しましょう。（4敗）<h3>OpenJDK 23 (23.0.1-11)</h3><p>最新ならとっても簡単です。<pre><code class="language-sh hljs language-bash">bash configure \
+--with-boot-jdk=/cygdrive/c/java/jdk-23.0.1+11 \
+--with-jtreg=/cygdrive/c/java/jtreg \
+--with-gtest=/cygdrive/c/src/googletest-1.14.0
+</code></pre><pre><code class="language-sh hljs language-bash">make all; make test-tier1
+</code></pre><h3>OpenJDK 22 (22.0.2-9)</h3><p>22までならなんの捻りもなくビルドが通ります。<pre><code class="language-sh hljs language-bash">bash configure \
+--with-boot-jdk=/cygdrive/c/java/jdk-22.0.2+9 \
+--with-jtreg=/cygdrive/c/java/jtreg \
+--with-gtest=/cygdrive/c/src/googletest-1.14.0
+</code></pre><pre><code class="language-sh hljs language-bash">make all; make test-tier1
+</code></pre><h3>OpenJDK 21 (21.0.6-6)</h3><p>最新のLTSですが、googletestを有効にするとビルドに失敗するようになります。 ここから雲行きが怪しくなります。<p>とりあえずバイナリが欲しいので、googletestを無効にしてビルドを進めます。<pre><code class="language-sh hljs language-bash"> bash configure \
+--with-boot-jdk=/cygdrive/c/java/jdk-21.0.5+11 \
+--with-jtreg=/cygdrive/c/java/jtreg
+</code></pre><p>googletestを無効化したせいでいくつかのhotspotテストが失敗として報告されますが、動くので多分問題ないでしょう。<pre><code class="language-sh hljs language-bash">make all; make test-tier1
+</code></pre><h3>OpenJDK 20 (20.0.2-ga)</h3><p>ビルド中にワーニング出てきて若干不穏な感じになりますが、まぁビルドが通るので良しとしましょう。<pre><code class="language-sh hljs language-bash">bash configure \
+--with-boot-jdk=/cygdrive/c/java/jdk-20.0.2+9 \
+--with-jtreg=/cygdrive/c/java/jtreg
+</code></pre><p>20からgoogletest起因以外でテストが1件失敗し始めます。<pre><code class="language-sh hljs language-bash">make all; make test-tier1
+</code></pre><h3>OpenJDK 19 (19.0.2-ga)</h3><pre><code class="language-sh hljs language-bash">bash configure \
+--with-boot-jdk/cygdrive/c/java/jdk-19.0.2+7 \
+--with-jtreg=/cygdrive/c/java/jtreg
+</code></pre><pre><code class="language-sh hljs language-bash">make all; make test-tier1
+</code></pre><h3>OpenJDK 18 (18.0.2.1-0)</h3><pre><code class="language-sh hljs language-bash">bash configure \
+--with-boot-jdk=/cygdrive/c/java/jdk-18.0.2.1+1 \
+--with-jtreg=/cygdrive/c/java/jtreg
+</code></pre><pre><code class="language-sh hljs language-bash">make all; make test-tier1
+</code></pre><h3>OpenJDK 17 (17.0.14-6)</h3><pre><code class="language-sh hljs language-bash">bash configure \
+--with-boot-jdk=/cygdrive/c/java/jdk-17.0.13+11 \
+--with-jtreg=/cygdrive/c/java/jtreg
+</code></pre><pre><code class="language-sh hljs language-bash">make all; make test-tier1
+</code></pre><h3>OpenJDK 16 (16.0.2-ga)</h3><p>Visual Studioのビルド環境の検出に失敗して<code>bash configure</code>自体が失敗します。<pre><code class="language-sh hljs language-bash">bash configure \
+--with-boot-jdk=/cygdrive/c/java/jdk-16.0.2+7 \
+--with-jtreg=/cygdrive/c/java/jtreg
+</code></pre><pre><code class="language-text hljs language-plaintext">configure: Using default toolchain microsoft (Microsoft Visual Studio)
+configure: error: Cannot locate a valid Visual Studio installation
+configure exiting with result code 1
+</code></pre><h3>OpenJDK 11 (11.0.26-3)</h3><p>11はまだビルドが通ります。 いつまで使う気なんでしょうね<pre><code class="language-sh hljs language-bash">bash configure \
+--with-boot-jdk=/cygdrive/c/java/jdk-11.0.25+9 \
+--with-jtreg=/cygdrive/c/java/jtreg
+</code></pre><pre><code class="language-sh hljs language-bash">make all; make run-test-tier1
+</code></pre><h3>OpenJDK 8 (jdk8u442-b04)</h3><p><code>u442</code>ってもはや何なんだよって感じです<pre><code class="language-sh hljs language-bash">bash configure \
+--with-boot-jdk=/cygdrive/c/java/jdk8u432-b06 \
+--with-jtreg=/cygdrive/c/java/jtreg \
+--with-freetype-src=/cygdrive/c/src/freetype-2.5.3
+</code></pre><p><code>bash configure</code>までは通るけど、ビルドはコケます。<pre><code class="language-sh hljs language-bash">make all
+</code></pre><p>おわり</div></article><hr><nav class=post-navigation><ul><li>← Previous: <a href=/posts/2024/09-14-docker-cache/ rel=prev>Docker Buildxでもキャッシュしたい</a><li><strong>Next: <a href=/posts/2024/12-28-2024-autumn-ap/ rel=next>応用情報技術者試験に合格していたお話</a> →</strong></ul></nav></main><footer><div><a href=/feed.xml> <svg viewbox="0 0 16 16" height=16 width=16 xmlns=http://www.w3.org/2000/svg><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"></path><path d="M5.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-3-8.5a1 1 0 0 1 1-1c5.523 0 10 4.477 10 10a1 1 0 1 1-2 0 8 8 0 0 0-8-8 1 1 0 0 1-1-1zm0 4a1 1 0 0 1 1-1 6 6 0 0 1 6 6 1 1 0 1 1-2 0 4 4 0 0 0-4-4 1 1 0 0 1-1-1z"></path></svg> </a></div></footer>
