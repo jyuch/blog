@@ -1,0 +1,167 @@
+<!doctype html><html lang=ja><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0" name=viewport><title>DSPyを使用してLLMを使ったレシートの読み取り精度を向上させたい - レンコン畑でつかまえて</title><meta content=安価なマルチモーダルLLMを使用したレシートの読み取り精度をDSPyを使用して改善するお話です。 name=description><link href=/pagefind/pagefind-ui.css rel=stylesheet><link href=/styles.css rel=stylesheet><link href=/feed.xml rel=alternate title=レンコン畑でつかまえて type=application/atom+xml><link href=/feed.json rel=alternate title=レンコン畑でつかまえて type=application/json><script src="https://www.googletagmanager.com/gtag/js?id=G-1F9LYQGGMB" async></script><script>window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-1F9LYQGGMB');</script><script src=/pagefind/pagefind-ui.js></script><script>window.addEventListener('DOMContentLoaded',()=>{new PagefindUI({"element":"#search","showImages":false,"excerptLength":0,"showEmptyFilters":true,"showSubResults":false,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"});});</script><body><nav class=navbar><a class=navbar-home href=/> <strong>レンコン畑でつかまえて</strong> </a><ul class=navbar-links><li><a href=/> Home </a><li><a href=/posts/> Archive </a><li><a href=https://about.jyuch.dev/> About Me </a></ul><div class=navbar-search><div id=search></div></div></nav><main class=body-post><article class=post data-pagefind-body><div class=post-header><h1 class=post-title>DSPyを使用してLLMを使ったレシートの読み取り精度を向上させたい</h1><nav class=post-tags><a class=tag href=/tags/python/>python</a><a class=tag href=/tags/gen-ai/>gen-ai</a><a class=tag href=/tags/databricks/>databricks</a><a class=tag href=/tags/dspy/>dspy</a></nav><time datetime="2025-10-26 00:00:00" class=post-date> October 26th, 2025 </time></div><div class=post-body><h2>はじめに</h2><p>簡単な家計簿をつけているのですが、レシートの内容を確認して転記するのがめんどくさいなと感じていました。<p>そこで、LLMを使って情報を抽出できないかなと考えていたのですが、せっかくなら<a href=https://dspy.ai/>DSPy</a>を使って構造化出力するのと、プロンプト最適化を行ってみたいなということで試してみました。<h2>シグネチャの準備</h2><p>DSPyでは入力値と出力値をコードとして表現します。 ここではレシート画像から購入日と合計金額を抽出することにします。<p>入力値と出力値はシグネチャとして表現され、<code>dspy.Signature</code>のサブクラスとして実装します。<pre><code class="language-python hljs"><span class=hljs-keyword>from</span> datetime <span class=hljs-keyword>import</span> date
+
+<span class=hljs-keyword>import</span> dspy
+
+
+<span class=hljs-keyword>class</span> <span class="hljs-title class_">ExtractReceiptInfo</span>(dspy.Signature):
+    <span class=hljs-string>"""Extract total amount from receipt image."""</span>
+
+    image: dspy.Image = dspy.InputField(desc=<span class=hljs-string>"Receipt image."</span>)
+    purchase_date: date = dspy.OutputField(desc=<span class=hljs-string>"Purchase date of payment."</span>)
+    total_amount: <span class=hljs-built_in>int</span> = dspy.OutputField(desc=<span class=hljs-string>"Total amount of payment."</span>)
+
+
+<span class=hljs-keyword>class</span> <span class="hljs-title class_">ReceiptExtractor</span>(dspy.Module):
+    <span class=hljs-keyword>def</span> <span class="hljs-title function_">__init__</span>(<span class=hljs-params>self</span>):
+        <span class=hljs-built_in>super</span>().__init__()
+        <span class="hljs-variable language_">self</span>.extractor = dspy.ChainOfThought(ExtractReceiptInfo)
+
+    <span class=hljs-keyword>def</span> <span class="hljs-title function_">forward</span>(<span class=hljs-params>self, image</span>):
+        <span class=hljs-keyword>return</span> <span class="hljs-variable language_">self</span>.extractor(image=image)
+
+
+<span class=hljs-keyword>def</span> <span class="hljs-title function_">extraction_metric</span>(<span class=hljs-params>gold, pred, trace=<span class=hljs-literal>None</span></span>):
+    metric = <span class=hljs-number>0</span>
+
+    <span class=hljs-keyword>if</span> gold.total_amount == pred.total_amount:
+        metric += <span class=hljs-number>1</span>
+    <span class=hljs-keyword>if</span> gold.purchase_date == pred.purchase_date:
+        metric += <span class=hljs-number>1</span>
+
+    <span class=hljs-keyword>if</span> trace <span class=hljs-keyword>is</span> <span class=hljs-literal>None</span>:
+        <span class=hljs-keyword>return</span> metric / <span class=hljs-number>2.0</span>
+    <span class=hljs-keyword>else</span>:
+        <span class=hljs-keyword>return</span> metric == <span class=hljs-number>2</span>
+</code></pre><h2>学習データの準備</h2><p>DSPyでは教師データを使用して入力データから期待する出力をするようにプロンプトを最適化します。<p>そのため、最初にある程度のレシート画像と、その画像からどのような結果を出力してほしいかの期待値をひたすら列挙する必要があります。<p>ここでは、以下のような教師データを家中のあるだけのレシートを使って作成します。 スキャナでレシートを読み込み、エクセルでレシート画像と期待値の組み合わせをひたすら入力します。<p>このデータそのまま家計簿に突っ込めばよくね？とか考えてはいけません。<table><thead><tr><th style=text-align:left>image<th style=text-align:right>purchase_date<th style=text-align:right>total_amount<tbody><tr><td style=text-align:left>20251019_000.jpg<td style=text-align:right>2025-08-28<td style=text-align:right>162<tr><td style=text-align:left>20251019_001.jpg<td style=text-align:right>2025-08-19<td style=text-align:right>170<tr><td style=text-align:left>20251019_002.jpg<td style=text-align:right>2025-09-09<td style=text-align:right>162<tr><td style=text-align:left>...<td style=text-align:right>...<td style=text-align:right>...</table><h2>LM Studioの準備</h2><p>タスクを実行するLLMはLM Studioを使ってローカルで実行するので、LM Studioをインストールしておきます。 モデルはGemma 3を使います。<h2>Databricks Free Editionの準備</h2><p>MIPROv2では教師として高性能なLLMを使用するのですが、ここではDatabricksでホストされているLlama 4 Maverickを利用します。<p>Databricks Free Editionではレートリミットなどの制限はありますが、無償で使わせてくれるのでありがたく使います。Databricksさんはなんて太っ腹なんでしょう！（ステマその１）<p>Settings → User → Developer → Access tokensからトークンを発行しておきます。 また、MLFlowも使いたいので、併せてExperimentsも作成しておきます。 Experimentsを作成すると、外部からExperimentsを使うにはみたいな画面が表示されるので、表示された環境変数をコピーしておきます。<p>最終的に以下の環境変数を登録します。<table><thead><tr><th style=text-align:left>環境変数<th style=text-align:left>例<tbody><tr><td style=text-align:left><code>DATABRICKS_API_BASE</code><td style=text-align:left><code>https://dbc-12345678-abcd.cloud.databricks.com/serving-endpoints</code><tr><td style=text-align:left><code>DATABRICKS_API_KEY</code><td style=text-align:left>Databricksのシークレット<tr><td style=text-align:left><code>DATABRICKS_HOST</code><td style=text-align:left><code>https://dbc-12345678-abcd.cloud.databricks.com</code><tr><td style=text-align:left><code>DATABRICKS_TOKEN</code><td style=text-align:left>Databricksのシークレット<tr><td style=text-align:left><code>MLFLOW_EXPERIMENT_ID</code><td style=text-align:left><code>123456789012345</code><tr><td style=text-align:left><code>MLFLOW_REGISTRY_URI</code><td style=text-align:left><code>databricks-uc</code><tr><td style=text-align:left><code>MLFLOW_TRACKING_URI</code><td style=text-align:left><code>databricks</code></table><p><code>DATABRICKS_API_BASE</code>と<code>DATABRICKS_API_KEY</code>はDatabricksのServing endpointsにアクセスする用で、それ以外はMLFlowにメトリックを送る用です。<h2>トレーニング</h2><p>必要なものがそろったらいよいよプロンプト最適化を実行します。 ここではとりあえずMIPROv2を使っていきます。<p>余談ですが、DSPyはLLMにアクセスするために<a href=https://www.litellm.ai/>LiteLLM</a>というライブラリを使用しているようです。<p>LiteLLMではプレフィックスでどのプロバイダーのAPI形式（OpenAI互換やAnthropic互換など）を判断しているようです。 また、LM StudioはOpenAI互換です。<p>そのため、OpenAI互換としてAPIを叩いてほしいのですが、<code>openai/google/gemma-3-12b</code>とかいう各方面から怒られそうなモデル名で指定をしないといけません。<pre><code class="language-python hljs"><span class=hljs-keyword>import</span> csv
+<span class=hljs-keyword>import</span> os
+<span class=hljs-keyword>from</span> datetime <span class=hljs-keyword>import</span> datetime
+<span class=hljs-keyword>from</span> typing <span class=hljs-keyword>import</span> <span class=hljs-type>List</span>
+
+<span class=hljs-keyword>import</span> dspy
+<span class=hljs-keyword>import</span> mlflow
+
+<span class=hljs-keyword>from</span> program <span class=hljs-keyword>import</span> ReceiptExtractor, extraction_metric
+
+LMSTUDIO_API_BASE = os.environ[<span class=hljs-string>"LMSTUDIO_API_BASE"</span>]
+
+teacher_llm = dspy.LM(
+    <span class=hljs-string>"databricks/databricks-llama-4-maverick"</span>,
+    temperature=<span class=hljs-number>1.0</span>,
+)
+
+student_llm = dspy.LM(
+    <span class=hljs-string>"openai/google/gemma-3-12b"</span>,
+    api_base=LMSTUDIO_API_BASE,
+    api_key=<span class=hljs-string>"dummy"</span>,
+)
+
+
+<span class=hljs-keyword>def</span> <span class="hljs-title function_">run_prompt_optimizer</span>(<span class=hljs-params>train_examples: <span class=hljs-type>List</span>[dspy.Example]</span>):
+    student_program = ReceiptExtractor()
+    optimizer = dspy.MIPROv2(
+        metric=extraction_metric, prompt_model=teacher_llm, task_model=student_llm
+    )
+    compiled_program = optimizer.<span class=hljs-built_in>compile</span>(student_program, trainset=train_examples)
+    compiled_program.save(<span class=hljs-string>"./program.json"</span>, save_program=<span class=hljs-literal>False</span>)
+
+
+<span class=hljs-keyword>def</span> <span class="hljs-title function_">main</span>():
+    mlflow.dspy.autolog(
+        log_compiles=<span class=hljs-literal>True</span>,
+        log_evals=<span class=hljs-literal>True</span>,
+        log_traces_from_compile=<span class=hljs-literal>True</span>,
+    )
+
+    dspy.configure(lm=student_llm)
+
+    train_examples: <span class=hljs-type>List</span>[dspy.Example]
+    <span class=hljs-keyword>with</span> <span class=hljs-built_in>open</span>(<span class=hljs-string>"./dataset/training.csv"</span>, encoding=<span class=hljs-string>"utf_8"</span>) <span class=hljs-keyword>as</span> f:
+        reader = csv.DictReader(f)
+        train_examples = [
+            dspy.Example(
+                image=dspy.Image.from_file(<span class=hljs-string>f"./dataset/<span class=hljs-subst>{row[<span class=hljs-string>'image'</span>]}</span>"</span>),
+                purchase_date=datetime.strptime(
+                    row[<span class=hljs-string>"purchase_date"</span>], <span class=hljs-string>"%Y-%m-%d"</span>
+                ).date(),
+                total_amount=<span class=hljs-built_in>int</span>(row[<span class=hljs-string>"total_amount"</span>]),
+            ).with_inputs(<span class=hljs-string>"image"</span>)
+            <span class=hljs-keyword>for</span> row <span class=hljs-keyword>in</span> reader
+        ]
+
+    run_prompt_optimizer(train_examples)
+
+
+<span class=hljs-keyword>if</span> __name__ == <span class=hljs-string>"__main__"</span>:
+    main()
+</code></pre><h2>評価</h2><p>学習が終わったら、とりあえずどのくらい違うのか評価してみましょう。<p>ここでは、学習前と学習後、LLMのモデル、パラメータ数を変えてどのくらい差があるのかを確認しています。<pre><code class="language-python hljs"><span class=hljs-keyword>import</span> csv
+<span class=hljs-keyword>import</span> os
+<span class=hljs-keyword>from</span> datetime <span class=hljs-keyword>import</span> datetime
+<span class=hljs-keyword>from</span> typing <span class=hljs-keyword>import</span> <span class=hljs-type>List</span>
+
+<span class=hljs-keyword>import</span> dspy
+<span class=hljs-keyword>from</span> dspy.evaluate.evaluate <span class=hljs-keyword>import</span> Evaluate
+
+<span class=hljs-keyword>from</span> program <span class=hljs-keyword>import</span> ReceiptExtractor, extraction_metric
+
+LMSTUDIO_API_BASE = os.environ[<span class=hljs-string>"LMSTUDIO_API_BASE"</span>]
+
+gemma_3_12b = dspy.LM(
+    <span class=hljs-string>"openai/google/gemma-3-12b"</span>,
+    api_base=LMSTUDIO_API_BASE,
+    api_key=<span class=hljs-string>"dummy"</span>,
+)
+
+gemma_3_27b = dspy.LM(
+    <span class=hljs-string>"openai/google/gemma-3-27b"</span>,
+    api_base=LMSTUDIO_API_BASE,
+    api_key=<span class=hljs-string>"dummy"</span>,
+)
+
+llama_4_maverick = dspy.LM(
+    <span class=hljs-string>"databricks/databricks-llama-4-maverick"</span>,
+)
+
+
+<span class=hljs-keyword>def</span> <span class="hljs-title function_">main</span>():
+    dspy.configure(lm=gemma_3_12b)
+    original = ReceiptExtractor()
+    trained = ReceiptExtractor()
+    trained.load(<span class=hljs-string>"./program.json"</span>)
+
+    train_examples: <span class=hljs-type>List</span>[dspy.Example]
+    <span class=hljs-keyword>with</span> <span class=hljs-built_in>open</span>(<span class=hljs-string>"./dataset/training.csv"</span>, encoding=<span class=hljs-string>"utf_8"</span>) <span class=hljs-keyword>as</span> f:
+        reader = csv.DictReader(f)
+        train_examples = [
+            dspy.Example(
+                image=dspy.Image.from_file(<span class=hljs-string>f"./dataset/<span class=hljs-subst>{row[<span class=hljs-string>'image'</span>]}</span>"</span>),
+                purchase_date=datetime.strptime(
+                    row[<span class=hljs-string>"purchase_date"</span>], <span class=hljs-string>"%Y-%m-%d"</span>
+                ).date(),
+                total_amount=<span class=hljs-built_in>int</span>(row[<span class=hljs-string>"total_amount"</span>]),
+            ).with_inputs(<span class=hljs-string>"image"</span>)
+            <span class=hljs-keyword>for</span> row <span class=hljs-keyword>in</span> reader
+        ]
+
+    evaluate = Evaluate(
+        devset=train_examples, num_threads=<span class=hljs-number>1</span>, display_progress=<span class=hljs-literal>True</span>, display_table=<span class=hljs-number>0</span>
+    )
+
+    <span class=hljs-keyword>with</span> dspy.context(lm=gemma_3_12b):
+        evaluate(original, metric=extraction_metric)
+        evaluate(trained, metric=extraction_metric)
+
+    <span class=hljs-keyword>with</span> dspy.context(lm=gemma_3_27b):
+        evaluate(original, metric=extraction_metric)
+        evaluate(trained, metric=extraction_metric)
+
+    <span class=hljs-keyword>with</span> dspy.context(lm=llama_4_maverick):
+        evaluate(original, metric=extraction_metric)
+        evaluate(trained, metric=extraction_metric)
+
+
+<span class=hljs-keyword>if</span> __name__ == <span class=hljs-string>"__main__"</span>:
+    main()
+</code></pre><table><thead><tr><th style=text-align:left>モデル<th style=text-align:right>最適化前<th style=text-align:right>最適化後<tbody><tr><td style=text-align:left><code>google/gemma-3-12</code><td style=text-align:right>84.0%<td style=text-align:right>96.2%<tr><td style=text-align:left><code>google/gemma-3-27b</code><td style=text-align:right>80.2%<td style=text-align:right>97.2%<tr><td style=text-align:left><code>databricks-llama-4-maverick</code><td style=text-align:right>100.0%<td style=text-align:right>100.0%</table><p>あー、うん、まぁ、ねぇ。<h2>おわりに</h2><p>プロンプト最適化の部分については確かに最適化すれば性能は上がりましたが、最初から高性能なモデルを使えばそりゃ精度は高いよねというのを如実に見せつけられました。<p>ですが、個人的には構造化出力をコードとして表現できるのはうれしみがありますね。 プロンプトにJSON Schemaをくっつけて、出力をJSONパーサに食わせて正常にパース出来るのを祈るという作業から解放されるだけでもDSPyを使ううれしみがあると思います。<p>教師データだけ用意しておけば、他のLLMが出てきたときは最適化と検証のループを回して、今までよりも成績が良ければ入れ替えるというサイクルをほぼ自動で回せます。<p>ギョームでLLMを使う場合はこの辺のサイクルを回せるようにしておくと後々のつらみポイントを軽減出来ると思うので、みなさんDatabricksと合わせて使ってみてはいかがでしょうか。（ステマその２）<p><a href=https://github.com/jyuch/extract-receipt/tree/master>jyuch / extract-receipt</a><p>おわり</div></article><hr><nav class=post-navigation><ul><li>← Previous: <a href=/posts/2025/10-12-pg18-uuidv7-is-monotonically-increasing/ rel=prev>PostgreSQL 18 の uuidv7 関数は単調性が保証されているから安心だねってお話</a><li><strong>Next: <a href=/posts/2025/12-28-dspy-kasu-no-uso/ rel=next>ダウナー系生成AIに毎日カスの嘘を流し込まれたい</a> →</strong></ul></nav></main><footer><div><a href=/feed.xml> <svg viewbox="0 0 16 16" height=16 width=16 xmlns=http://www.w3.org/2000/svg><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"></path><path d="M5.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-3-8.5a1 1 0 0 1 1-1c5.523 0 10 4.477 10 10a1 1 0 1 1-2 0 8 8 0 0 0-8-8 1 1 0 0 1-1-1zm0 4a1 1 0 0 1 1-1 6 6 0 0 1 6 6 1 1 0 1 1-2 0 4 4 0 0 0-4-4 1 1 0 0 1-1-1z"></path></svg> </a></div></footer>

@@ -1,0 +1,257 @@
+<!doctype html><html lang=ja><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0" name=viewport><title>RustでもHickory DNSを使ってDNS Forwarderを実装したい - レンコン畑でつかまえて</title><meta content="RustからHickory DNSを使用してDNS Forwarderを実装する方法を確認します" name=description><link href=/pagefind/pagefind-ui.css rel=stylesheet><link href=/styles.css rel=stylesheet><link href=/feed.xml rel=alternate title=レンコン畑でつかまえて type=application/atom+xml><link href=/feed.json rel=alternate title=レンコン畑でつかまえて type=application/json><script src="https://www.googletagmanager.com/gtag/js?id=G-1F9LYQGGMB" async></script><script>window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-1F9LYQGGMB');</script><script src=/pagefind/pagefind-ui.js></script><script>window.addEventListener('DOMContentLoaded',()=>{new PagefindUI({"element":"#search","showImages":false,"excerptLength":0,"showEmptyFilters":true,"showSubResults":false,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"});});</script><body><nav class=navbar><a class=navbar-home href=/> <strong>レンコン畑でつかまえて</strong> </a><ul class=navbar-links><li><a href=/> Home </a><li><a href=/posts/> Archive </a><li><a href=https://about.jyuch.dev/> About Me </a></ul><div class=navbar-search><div id=search></div></div></nav><main class=body-post><article class=post data-pagefind-body><div class=post-header><h1 class=post-title>RustでもHickory DNSを使ってDNS Forwarderを実装したい</h1><nav class=post-tags><a class=tag href=/tags/rust/>rust</a><a class=tag href=/tags/dns/>dns</a></nav><time datetime="2024-04-01 00:00:00" class=post-date> April 1st, 2024 </time></div><div class=post-body><h2>はじめに</h2><p>DNSは春の季語なので、<a href=https://github.com/hickory-dns/hickory-dns>Hickory DNS</a>を使用してDNS Forwarderを実装する方法を確認してみました。<p>とにかくドキュメントの整備が追い付いていないので、困ったらソースコードを読みましょう。これがオープンソースの強みですね（）<h2>とりあえず適当な値を返す</h2><p>Hickory DNSでのサーバ実装は<code>hickory_server</code>クレートで実装されています。<p><code>hickory_server</code>でのアクセスの受付は<code>ServerFuture</code>に実装されています。 <code>ServerFuture::new</code>で<code>RequestHandler</code>トレイトを受け取るので、このトレイトを実装すればとりあえずなんらかの値は返せそうです。<p>と思って<a href=https://docs.rs/hickory-server/latest/hickory_server/server/trait.RequestHandler.html>docs.rsで当該トレイトのドキュメント</a>を見ると、面妖なシグネチャが現れます。<pre><code class="language-rust hljs"><span class=hljs-keyword>pub</span> <span class=hljs-keyword>trait</span> <span class="hljs-title class_">RequestHandler</span>: <span class=hljs-built_in>Send</span> + <span class=hljs-built_in>Sync</span> + Unpin + <span class=hljs-symbol>'static</span> {
+    <span class=hljs-comment>// Required method</span>
+    <span class=hljs-keyword>fn</span> <span class="hljs-title function_">handle_request</span>&lt;<span class=hljs-symbol>'life0</span>, <span class=hljs-symbol>'life1</span>, <span class=hljs-symbol>'async_trait</span>, R>(
+        &<span class=hljs-symbol>'life0</span> <span class=hljs-keyword>self</span>,
+        request: &<span class=hljs-symbol>'life1</span> Request,
+        response_handle: R
+    ) <span class=hljs-punctuation>-></span> Pin&lt;<span class=hljs-type>Box</span>&lt;<span class=hljs-keyword>dyn</span> Future&lt;Output = ResponseInfo> + <span class=hljs-built_in>Send</span> + <span class=hljs-symbol>'async_trait</span>>>
+       <span class=hljs-keyword>where</span> R: <span class=hljs-symbol>'async_trait</span> + ResponseHandler,
+             <span class=hljs-keyword>Self</span>: <span class=hljs-symbol>'async_trait</span>,
+             <span class=hljs-symbol>'life0</span>: <span class=hljs-symbol>'async_trait</span>,
+             <span class=hljs-symbol>'life1</span>: <span class=hljs-symbol>'async_trait</span>;
+}
+</code></pre><p>まぁ、この手のシグネチャは大体<code>#[async_trait::async_trait]</code>で生成されているパターンが多いので、落ち着いて実装を覗いてみると以下の感じになってます。<pre><code class="language-rust hljs"><span class=hljs-comment>/// Trait for handling incoming requests, and providing a message response.</span>
+<span class=hljs-meta>#[async_trait::async_trait]</span>
+<span class=hljs-keyword>pub</span> <span class=hljs-keyword>trait</span> <span class="hljs-title class_">RequestHandler</span>: <span class=hljs-built_in>Send</span> + <span class=hljs-built_in>Sync</span> + Unpin + <span class=hljs-symbol>'static</span> {
+    <span class=hljs-comment>/// Determines what needs to happen given the type of request, i.e. Query or Update.</span>
+    <span class=hljs-comment>///</span>
+    <span class=hljs-comment>/// # Arguments</span>
+    <span class=hljs-comment>///</span>
+    <span class=hljs-comment>/// * `request` - the requested action to perform.</span>
+    <span class=hljs-comment>/// * `response_handle` - handle to which a return message should be sent</span>
+    <span class=hljs-keyword>async</span> <span class=hljs-keyword>fn</span> <span class="hljs-title function_">handle_request</span>&lt;R: ResponseHandler>(
+        &<span class=hljs-keyword>self</span>,
+        request: &Request,
+        response_handle: R,
+    ) <span class=hljs-punctuation>-></span> ResponseInfo;
+}
+</code></pre><p><code>hickory_server</code>では<code>Catalog</code>がデフォルトの実装なので、そのコードを参考に決め打ちのIPを返すように実装します。<pre><code class="language-rust hljs"><span class=hljs-keyword>struct</span> <span class="hljs-title class_">StubRequestHandler</span> {}
+
+<span class=hljs-keyword>impl</span> <span class="hljs-title class_">StubRequestHandler</span> {
+    <span class=hljs-keyword>pub</span> <span class=hljs-keyword>fn</span> <span class="hljs-title function_">new</span>() <span class=hljs-punctuation>-></span> <span class=hljs-keyword>Self</span> {
+        StubRequestHandler {}
+    }
+}
+
+<span class=hljs-meta>#[async_trait::async_trait]</span>
+<span class=hljs-keyword>impl</span> <span class="hljs-title class_">RequestHandler</span> <span class=hljs-keyword>for</span> <span class="hljs-title class_">StubRequestHandler</span> {
+    <span class=hljs-keyword>async</span> <span class=hljs-keyword>fn</span> <span class="hljs-title function_">handle_request</span>&lt;R: ResponseHandler>(
+        &<span class=hljs-keyword>self</span>,
+        request: &Request,
+        <span class=hljs-keyword>mut</span> response_handle: R,
+    ) <span class=hljs-punctuation>-></span> ResponseInfo {
+        <span class=hljs-keyword>let</span> <span class=hljs-variable>result</span> = <span class=hljs-keyword>match</span> request.<span class="hljs-title function_ invoke__">message_type</span>() {
+            MessageType::Query => <span class=hljs-keyword>match</span> request.<span class="hljs-title function_ invoke__">op_code</span>() {
+                OpCode::Query => {
+                    <span class=hljs-keyword>let</span> <span class=hljs-variable>a</span> = A::<span class="hljs-title function_ invoke__">new</span>(<span class=hljs-number>203</span>, <span class=hljs-number>0</span>, <span class=hljs-number>113</span>, <span class=hljs-number>1</span>);
+                    <span class=hljs-keyword>let</span> <span class=hljs-variable>rd</span> = RData::<span class="hljs-title function_ invoke__">A</span>(a);
+                    <span class=hljs-keyword>let</span> <span class=hljs-variable>r</span> =
+                        Record::<span class="hljs-title function_ invoke__">from_rdata</span>(request.<span class="hljs-title function_ invoke__">query</span>().<span class="hljs-title function_ invoke__">name</span>().<span class="hljs-title function_ invoke__">into_name</span>().<span class="hljs-title function_ invoke__">unwrap</span>(), <span class=hljs-number>3600</span>, rd);
+                    <span class=hljs-keyword>let</span> <span class=hljs-variable>response</span> = MessageResponseBuilder::<span class="hljs-title function_ invoke__">from_message_request</span>(request);
+                    <span class=hljs-keyword>let</span> <span class=hljs-variable>response</span> =
+                        response.<span class="hljs-title function_ invoke__">build</span>(*request.<span class="hljs-title function_ invoke__">header</span>(), <span class=hljs-built_in>vec!</span>[&r], <span class=hljs-built_in>vec!</span>[], <span class=hljs-built_in>vec!</span>[], <span class=hljs-built_in>vec!</span>[]);
+                    response_handle.<span class="hljs-title function_ invoke__">send_response</span>(response).<span class=hljs-keyword>await</span>
+                }
+                _op => {
+                    <span class=hljs-keyword>let</span> <span class=hljs-variable>response</span> = MessageResponseBuilder::<span class="hljs-title function_ invoke__">from_message_request</span>(request);
+                    response_handle
+                        .<span class="hljs-title function_ invoke__">send_response</span>(response.<span class="hljs-title function_ invoke__">error_msg</span>(request.<span class="hljs-title function_ invoke__">header</span>(), ResponseCode::NotImp))
+                        .<span class=hljs-keyword>await</span>
+                }
+            },
+            MessageType::Response => {
+                <span class=hljs-keyword>let</span> <span class=hljs-variable>response</span> = MessageResponseBuilder::<span class="hljs-title function_ invoke__">from_message_request</span>(request);
+                response_handle
+                    .<span class="hljs-title function_ invoke__">send_response</span>(response.<span class="hljs-title function_ invoke__">error_msg</span>(request.<span class="hljs-title function_ invoke__">header</span>(), ResponseCode::NotImp))
+                    .<span class=hljs-keyword>await</span>
+            }
+        };
+
+        result.<span class="hljs-title function_ invoke__">unwrap_or_else</span>(|_e| {
+            <span class=hljs-keyword>let</span> <span class=hljs-keyword>mut </span><span class=hljs-variable>header</span> = Header::<span class="hljs-title function_ invoke__">new</span>();
+            header.<span class="hljs-title function_ invoke__">set_response_code</span>(ResponseCode::ServFail);
+            header.<span class="hljs-title function_ invoke__">into</span>()
+        })
+    }
+}
+</code></pre><p><code>QUERY</code>にのみ反応し、それ以外は<code>NOTIMP</code>を返しています。<p>あとは、いい感じに<code>main</code>を実装してあげます。<pre><code class="language-rust hljs"><span class=hljs-meta>#[derive(Parser, Debug)]</span>
+<span class=hljs-keyword>struct</span> <span class="hljs-title class_">Cli</span> {
+    <span class=hljs-comment>/// Bind address</span>
+    <span class=hljs-meta>#[clap(long)]</span>
+    bind: SocketAddr,
+}
+
+<span class=hljs-meta>#[tokio::main]</span>
+<span class=hljs-keyword>async</span> <span class=hljs-keyword>fn</span> <span class="hljs-title function_">main</span>() <span class=hljs-punctuation>-></span> anyhow::<span class=hljs-type>Result</span>&lt;()> {
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>opt</span> = Cli::<span class="hljs-title function_ invoke__">parse</span>();
+
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>socket</span> = UdpSocket::<span class="hljs-title function_ invoke__">bind</span>(&opt.bind).<span class=hljs-keyword>await</span>?;
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>handler</span> = StubRequestHandler::<span class="hljs-title function_ invoke__">new</span>();
+    <span class=hljs-keyword>let</span> <span class=hljs-keyword>mut </span><span class=hljs-variable>server</span> = ServerFuture::<span class="hljs-title function_ invoke__">new</span>(handler);
+    server.<span class="hljs-title function_ invoke__">register_socket</span>(socket);
+    server.<span class="hljs-title function_ invoke__">block_until_done</span>().<span class=hljs-keyword>await</span>?;
+
+    <span class="hljs-title function_ invoke__">Ok</span>(())
+}
+</code></pre><pre><code class="language-sh hljs language-bash">❯ dig @192.168.2.32 www.jyuch.dev
+;; Warning: query response not <span class=hljs-built_in>set</span>
+
+; &lt;&lt;>> DiG 9.18.18-0ubuntu2.1-Ubuntu &lt;&lt;>> @192.168.2.32 www.jyuch.dev
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER&lt;&lt;- <span class=hljs-string>opcode: QUERY, status: NOERROR, id: 37403
+;; flags: rd ad; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 0
+;; WARNING: recursion requested but not available
+
+;; QUESTION SECTION:
+;www.jyuch.dev.                 IN      A
+
+;; ANSWER SECTION:
+www.jyuch.dev.          3600    IN      A       203.0.113.1
+
+;; Query time: 0 msec
+;; SERVER: 192.168.2.32#53(192.168.2.32) (UDP)
+;; WHEN: Sun Mar 31 19:52:46 JST 2024
+;; MSG SIZE  rcvd: 47
+</span></code></pre><h2>DNS Fordingする</h2><p>DNSのクライアント側の実装は<code>hickory_client</code>クレートにあります。<p>せっかくtokioを使ってるので、上流に問い合わせるためのクライアントとして<code>AsyncClient</code>を使ってみます。<pre><code class="language-rust hljs"><span class=hljs-keyword>struct</span> <span class="hljs-title class_">StubRequestHandler</span> {
+    upstream: Arc&lt;Mutex&lt;AsyncClient>>,
+}
+
+<span class=hljs-keyword>impl</span> <span class="hljs-title class_">StubRequestHandler</span> {
+    <span class=hljs-keyword>pub</span> <span class=hljs-keyword>fn</span> <span class="hljs-title function_">new</span>(upstream: Arc&lt;Mutex&lt;AsyncClient>>) <span class=hljs-punctuation>-></span> <span class=hljs-keyword>Self</span> {
+        StubRequestHandler { upstream }
+    }
+}
+
+<span class=hljs-meta>#[async_trait::async_trait]</span>
+<span class=hljs-keyword>impl</span> <span class="hljs-title class_">RequestHandler</span> <span class=hljs-keyword>for</span> <span class="hljs-title class_">StubRequestHandler</span> {
+    <span class=hljs-keyword>async</span> <span class=hljs-keyword>fn</span> <span class="hljs-title function_">handle_request</span>&lt;R: ResponseHandler>(
+        &<span class=hljs-keyword>self</span>,
+        request: &Request,
+        response_handle: R,
+    ) <span class=hljs-punctuation>-></span> ResponseInfo {
+        <span class=hljs-keyword>let</span> <span class=hljs-variable>result</span> = <span class=hljs-keyword>match</span> request.<span class="hljs-title function_ invoke__">message_type</span>() {
+            MessageType::Query => <span class=hljs-keyword>match</span> request.<span class="hljs-title function_ invoke__">op_code</span>() {
+                OpCode::Query => {
+                    <span class=hljs-keyword>let</span> <span class=hljs-variable>upstream</span> = &<span class=hljs-keyword>mut</span> *<span class=hljs-keyword>self</span>.upstream.<span class="hljs-title function_ invoke__">lock</span>().<span class=hljs-keyword>await</span>;
+                    forward_to_upstream(upstream, request, response_handle).<span class=hljs-keyword>await</span>
+                }
+                _op => <span class="hljs-title function_ invoke__">server_not_implement</span>(request, response_handle).<span class=hljs-keyword>await</span>,
+            },
+            MessageType::Response => <span class="hljs-title function_ invoke__">server_not_implement</span>(request, response_handle).<span class=hljs-keyword>await</span>,
+        };
+
+        result.<span class="hljs-title function_ invoke__">unwrap_or_else</span>(|_e| {
+            <span class=hljs-keyword>let</span> <span class=hljs-keyword>mut </span><span class=hljs-variable>header</span> = Header::<span class="hljs-title function_ invoke__">new</span>();
+            header.<span class="hljs-title function_ invoke__">set_response_code</span>(ResponseCode::ServFail);
+            header.<span class="hljs-title function_ invoke__">into</span>()
+        })
+    }
+}
+
+<span class=hljs-keyword>async</span> <span class=hljs-keyword>fn</span> <span class="hljs-title function_">forward_to_upstream</span>&lt;R: ResponseHandler>(
+    upstream: &<span class=hljs-keyword>mut</span> AsyncClient,
+    request: &Request,
+    <span class=hljs-keyword>mut</span> response_handle: R,
+) <span class=hljs-punctuation>-></span> anyhow::<span class=hljs-type>Result</span>&lt;ResponseInfo> {
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>response</span> = upstream
+        .<span class="hljs-title function_ invoke__">query</span>(
+            request.<span class="hljs-title function_ invoke__">query</span>().<span class="hljs-title function_ invoke__">name</span>().<span class="hljs-title function_ invoke__">into_name</span>().<span class="hljs-title function_ invoke__">unwrap</span>(),
+            request.<span class="hljs-title function_ invoke__">query</span>().<span class="hljs-title function_ invoke__">query_class</span>(),
+            request.<span class="hljs-title function_ invoke__">query</span>().<span class="hljs-title function_ invoke__">query_type</span>(),
+        )
+        .<span class=hljs-keyword>await</span>?;
+
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>response_builder</span> = MessageResponseBuilder::<span class="hljs-title function_ invoke__">from_message_request</span>(request);
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>response</span> = response_builder.<span class="hljs-title function_ invoke__">build</span>(
+        *request.<span class="hljs-title function_ invoke__">header</span>(),
+        response.<span class="hljs-title function_ invoke__">answers</span>(),
+        <span class=hljs-built_in>vec!</span>[],
+        <span class=hljs-built_in>vec!</span>[],
+        <span class=hljs-built_in>vec!</span>[],
+    );
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>response_info</span> = response_handle.<span class="hljs-title function_ invoke__">send_response</span>(response).<span class=hljs-keyword>await</span>?;
+
+    <span class="hljs-title function_ invoke__">Ok</span>(response_info)
+}
+
+<span class=hljs-keyword>async</span> <span class=hljs-keyword>fn</span> <span class="hljs-title function_">server_not_implement</span>&lt;R: ResponseHandler>(
+    request: &Request,
+    <span class=hljs-keyword>mut</span> response_handle: R,
+) <span class=hljs-punctuation>-></span> anyhow::<span class=hljs-type>Result</span>&lt;ResponseInfo> {
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>response</span> = MessageResponseBuilder::<span class="hljs-title function_ invoke__">from_message_request</span>(request);
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>response_info</span> = response_handle
+        .<span class="hljs-title function_ invoke__">send_response</span>(response.<span class="hljs-title function_ invoke__">error_msg</span>(request.<span class="hljs-title function_ invoke__">header</span>(), ResponseCode::NotImp))
+        .<span class=hljs-keyword>await</span>?;
+
+    <span class="hljs-title function_ invoke__">Ok</span>(response_info)
+}
+</code></pre><p>あとはいい感じに<code>AsyncClient</code>を構築して<code>StubRequestHandler</code>に渡してあげればOKです。<pre><code class="language-rust hljs"><span class=hljs-meta>#[derive(Parser, Debug)]</span>
+<span class=hljs-keyword>struct</span> <span class="hljs-title class_">Cli</span> {
+    <span class=hljs-comment>/// Bind address</span>
+    <span class=hljs-meta>#[clap(long)]</span>
+    bind: SocketAddr,
+
+    <span class=hljs-comment>/// Upstream address</span>
+    <span class=hljs-meta>#[clap(long)]</span>
+    upstream: SocketAddr,
+}
+
+<span class=hljs-meta>#[tokio::main]</span>
+<span class=hljs-keyword>async</span> <span class=hljs-keyword>fn</span> <span class="hljs-title function_">main</span>() <span class=hljs-punctuation>-></span> anyhow::<span class=hljs-type>Result</span>&lt;()> {
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>opt</span> = Cli::<span class="hljs-title function_ invoke__">parse</span>();
+
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>conn</span> = UdpClientStream::&lt;UdpSocket>::<span class="hljs-title function_ invoke__">new</span>(opt.upstream);
+    <span class=hljs-keyword>let</span> (upstream, background) = AsyncClient::<span class="hljs-title function_ invoke__">connect</span>(conn).<span class=hljs-keyword>await</span>?;
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>_handle</span> = tokio::<span class="hljs-title function_ invoke__">spawn</span>(background);
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>handler</span> = StubRequestHandler::<span class="hljs-title function_ invoke__">new</span>(Arc::<span class="hljs-title function_ invoke__">new</span>(Mutex::<span class="hljs-title function_ invoke__">new</span>(upstream)));
+
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>socket</span> = UdpSocket::<span class="hljs-title function_ invoke__">bind</span>(&opt.bind).<span class=hljs-keyword>await</span>?;
+    <span class=hljs-keyword>let</span> <span class=hljs-keyword>mut </span><span class=hljs-variable>server</span> = ServerFuture::<span class="hljs-title function_ invoke__">new</span>(handler);
+    server.<span class="hljs-title function_ invoke__">register_socket</span>(socket);
+    server.<span class="hljs-title function_ invoke__">block_until_done</span>().<span class=hljs-keyword>await</span>?;
+
+    <span class="hljs-title function_ invoke__">Ok</span>(())
+}
+</code></pre><pre><code class="language-sh hljs language-bash">❯ dig @192.168.2.32 www.jyuch.dev
+;; Warning: query response not <span class=hljs-built_in>set</span>
+
+; &lt;&lt;>> DiG 9.18.18-0ubuntu2.1-Ubuntu &lt;&lt;>> @192.168.2.32 www.jyuch.dev
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER&lt;&lt;- <span class=hljs-string>opcode: QUERY, status: NOERROR, id: 7791
+;; flags: rd ad; QUERY: 1, ANSWER: 5, AUTHORITY: 0, ADDITIONAL: 0
+;; WARNING: recursion requested but not available
+
+;; QUESTION SECTION:
+;www.jyuch.dev.                 IN      A
+
+;; ANSWER SECTION:
+www.jyuch.dev.          300     IN      CNAME   jyuch.github.io.
+jyuch.github.io.        3600    IN      A       185.199.111.153
+jyuch.github.io.        3600    IN      A       185.199.109.153
+jyuch.github.io.        3600    IN      A       185.199.108.153
+jyuch.github.io.        3600    IN      A       185.199.110.153
+
+;; Query time: 28 msec
+;; SERVER: 192.168.2.32#53(192.168.2.32) (UDP)
+;; WHEN: Sun Mar 31 20:31:41 JST 2024
+;; MSG SIZE  rcvd: 124
+</span></code></pre><h2>追記その１</h2><p>リクエストヘッダをそのままレスポンスヘッダとして打ち返していましたが、そうするとsystemd-resolvedが受け取り拒否します。 Windowsはあんまり気にしていないみたいですけど。<p>正しくは以下の感じですね。<pre><code class="language-rust hljs"><span class=hljs-keyword>let</span> <span class=hljs-variable>response_header</span> = Header::<span class="hljs-title function_ invoke__">response_from_request</span>(request.<span class="hljs-title function_ invoke__">header</span>());
+<span class=hljs-keyword>let</span> <span class=hljs-variable>response_builder</span> = MessageResponseBuilder::<span class="hljs-title function_ invoke__">from_message_request</span>(request);
+<span class=hljs-keyword>let</span> <span class=hljs-variable>response</span> = response_builder.<span class="hljs-title function_ invoke__">build</span>(
+    response_header,
+    dns_response.<span class="hljs-title function_ invoke__">as_ref</span>().<span class="hljs-title function_ invoke__">map</span>(|it| it.<span class="hljs-title function_ invoke__">answers</span>()).<span class="hljs-title function_ invoke__">unwrap_or</span>(&[]),
+    &[],
+    &[],
+    &[],
+</code></pre><p>digの結果の一行目に警告が載ってましたね・・・<pre><code class="language-text hljs language-plaintext">;; Warning: query response not set
+</code></pre><h2>追記その２</h2><p>単純に<code>Header::response_from_request</code>するとレスポンスヘッダに再起フラグが立たないので、上位DNSからのレスポンスヘッダに再起フラグが立っていたら立ててあげる必要があるようです。<pre><code class="language-rust hljs"><span class=hljs-keyword>let</span> <span class=hljs-keyword>mut </span><span class=hljs-variable>response_header</span> = Header::<span class="hljs-title function_ invoke__">response_from_request</span>(request.<span class="hljs-title function_ invoke__">header</span>());
+response_header.<span class="hljs-title function_ invoke__">set_recursion_available</span>(response.<span class="hljs-title function_ invoke__">recursion_available</span>());
+</code></pre><p>でないとこんな警告がでます。というか出てましたね。ちゃんと読めよ<pre><code class="language-text hljs language-plaintext">;; WARNING: recursion requested but not available
+</code></pre><p>おわり</div></article><hr><nav class=post-navigation><ul><li>← Previous: <a href=/posts/2023/09-08-rust-with-otlp/ rel=prev>RustでもOTLPでJaegerにテレメトリを送りたい</a><li><strong>Next: <a href=/posts/2024/06-03-advoid-dns-based-ad-blocker/ rel=next>RustでもDNSベースのアドブロッカーを実装したい</a> →</strong></ul></nav></main><footer><div><a href=/feed.xml> <svg viewbox="0 0 16 16" height=16 width=16 xmlns=http://www.w3.org/2000/svg><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"></path><path d="M5.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-3-8.5a1 1 0 0 1 1-1c5.523 0 10 4.477 10 10a1 1 0 1 1-2 0 8 8 0 0 0-8-8 1 1 0 0 1-1-1zm0 4a1 1 0 0 1 1-1 6 6 0 0 1 6 6 1 1 0 1 1-2 0 4 4 0 0 0-4-4 1 1 0 0 1-1-1z"></path></svg> </a></div></footer>

@@ -1,0 +1,122 @@
+<!doctype html><html lang=ja><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0" name=viewport><title>Databricks Zerobus Ingestでサーバレスでリアルタイムにデータを流し込みたかった - レンコン畑でつかまえて</title><meta content="Databricks Zerobus Ingestでデータを流し込みたかったのですが、デフォルトストレージではだめでした。" name=description><link href=/pagefind/pagefind-ui.css rel=stylesheet><link href=/styles.css rel=stylesheet><link href=/feed.xml rel=alternate title=レンコン畑でつかまえて type=application/atom+xml><link href=/feed.json rel=alternate title=レンコン畑でつかまえて type=application/json><script src="https://www.googletagmanager.com/gtag/js?id=G-1F9LYQGGMB" async></script><script>window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-1F9LYQGGMB');</script><script src=/pagefind/pagefind-ui.js></script><script>window.addEventListener('DOMContentLoaded',()=>{new PagefindUI({"element":"#search","showImages":false,"excerptLength":0,"showEmptyFilters":true,"showSubResults":false,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"});});</script><body><nav class=navbar><a class=navbar-home href=/> <strong>レンコン畑でつかまえて</strong> </a><ul class=navbar-links><li><a href=/> Home </a><li><a href=/posts/> Archive </a><li><a href=https://about.jyuch.dev/> About Me </a></ul><div class=navbar-search><div id=search></div></div></nav><main class=body-post><article class=post data-pagefind-body><div class=post-header><h1 class=post-title>Databricks Zerobus Ingestでサーバレスでリアルタイムにデータを流し込みたかった</h1><nav class=post-tags><a class=tag href=/tags/rust/>rust</a><a class=tag href=/tags/databricks/>databricks</a></nav><time datetime="2026-04-04 00:00:00" class=post-date> April 4th, 2026 </time></div><div class=post-body><h2>はじめに</h2><p>ついにDatabricksのZerobus IngestがGAとなりました。<p>Preview版ではデフォルトストレージは対応していないとありましたが、GAになったタイミングでその表示が消えたので、Databricks Free Editionで試してみることにしました。<h2>テーブルの作成</h2><p>Databricks上のテーブルからProtobufの定義を生成出来るようなので、まずはテーブルを作成します。<p>ここではひとまず私が必要そうなデータ型に絞ってテーブルを作成します。<pre><code class="language-sql hljs"><span class=hljs-keyword>CREATE</span> <span class=hljs-keyword>OR</span> REPLACE <span class=hljs-keyword>TABLE</span> workspace.default.zerobus_sample (
+    id <span class=hljs-type>INT</span>,
+    name STRING,
+    create_at <span class=hljs-type>TIMESTAMP</span>
+);
+</code></pre><h2>Protobufの定義生成</h2><p>テーブルを作成したら、テーブル定義からProtbufの定義を生成します。<p><a href=https://github.com/databricks/zerobus-sdk>Zerobus Ingest SDK</a>に生成するためのツール（<a href=https://github.com/databricks/zerobus-sdk/tree/main/rust/tools/generate_files>generate_files</a>）があるので、それを使って生成します。<p>ツールはサービスプリンシパル経由で触りに行くタイプなので、サービスプリンシパルを作成してシークレットを生成しておきます。<p>また、テーブル定義も触りに行く必要があるので、サービスプリンシパルに権限を振るのを忘れないようにして下さい。（1敗）<p>ツールはRustを使って実装されているので、Rustの処理系をあらかじめインストールしておきます。 あとは以下のコマンドで生成できます。<pre><code class="language-sh hljs language-bash">cargo run -- \
+  --uc-endpoint <span class=hljs-string>"&lt;your_uc_endpoint>"</span> \
+  --client-id <span class=hljs-string>"your-client-id"</span> \
+  --client-secret <span class=hljs-string>"your-client-secret"</span> \
+  --table <span class=hljs-string>"workspace.default.zerobus_sample"</span>
+</code></pre><h2>クライアントの実装</h2><p>今回はRustで書いていきます。<p>必要なライブラリは以下の通りなのですが、<a href=https://crates.io/crates/databricks-zerobus-ingest-sdk>databricks-zerobus-ingest-sdk</a>のprost系は<code>0.13</code>に依存しているので、prostだけは<code>0.13</code>を明示的に指定してインストールする必要があります。（1敗）<pre><code class="language-toml hljs language-ini"><span class=hljs-section>[dependencies]</span>
+<span class=hljs-comment># 必須</span>
+<span class=hljs-attr>databricks-zerobus-ingest-sdk</span> = <span class=hljs-string>"1.0.1"</span>
+<span class=hljs-attr>prost</span> = <span class=hljs-string>"0.13.5"</span>
+<span class=hljs-attr>prost-types</span> = <span class=hljs-string>"0.13.5"</span>
+<span class=hljs-attr>tokio</span> = { version = <span class=hljs-string>"1"</span>, features = [<span class=hljs-string>"full"</span>] }
+<span class=hljs-comment># お好みで</span>
+<span class=hljs-attr>anyhow</span> = <span class=hljs-string>"1"</span>
+<span class=hljs-attr>chrono</span> = <span class=hljs-string>"0.4"</span>
+</code></pre><p>あとは<a href=https://github.com/databricks/zerobus-sdk/blob/main/rust/examples/proto/single/src/main.rs>公式のサンプル</a>をベースに簡単な書き込み処理を実装していきます。<pre><code class="language-rust hljs"><span class=hljs-keyword>use</span> crate::samples::TableZerobusSample;
+<span class=hljs-keyword>use</span> databricks_zerobus_ingest_sdk::{
+    ProtoMessage, StreamConfigurationOptions, TableProperties, ZerobusSdk, ZerobusStream,
+};
+<span class=hljs-keyword>use</span> prost::Message;
+<span class=hljs-keyword>use</span> prost_types::{DescriptorProto, FileDescriptorSet};
+<span class=hljs-keyword>use</span> std::fs;
+
+<span class=hljs-keyword>pub</span> <span class=hljs-keyword>mod</span> samples {
+    include!(<span class=hljs-string>"../output/zerobus_sample.rs"</span>);
+}
+
+<span class=hljs-keyword>const</span> SERVER_ENDPOINT: &<span class=hljs-type>str</span> = <span class=hljs-string>"&lt;workspace id>.zerobus.&lt;region>.cloud.databricks.com"</span>;
+<span class=hljs-keyword>const</span> DATABRICKS_WORKSPACE_URL: &<span class=hljs-type>str</span> = <span class=hljs-string>"https://dbc-12345678-90ab.cloud.databricks.com"</span>;
+<span class=hljs-keyword>const</span> DATABRICKS_CLIENT_ID: &<span class=hljs-type>str</span> = <span class=hljs-string>"00000000-0000-0000-0000-000000000000"</span>;
+<span class=hljs-keyword>const</span> DATABRICKS_CLIENT_SECRET: &<span class=hljs-type>str</span> = <span class=hljs-string>"dose12345678901234567890123456789012"</span>;
+
+<span class=hljs-meta>#[tokio::main]</span>
+<span class=hljs-keyword>async</span> <span class=hljs-keyword>fn</span> <span class="hljs-title function_">main</span>() <span class=hljs-punctuation>-></span> anyhow::<span class=hljs-type>Result</span>&lt;()> {
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>descriptor_proto</span> = <span class="hljs-title function_ invoke__">load_descriptor</span>(
+        <span class=hljs-string>"output/zerobus_sample.descriptor"</span>,
+        <span class=hljs-string>"zerobus_sample.proto"</span>,
+        <span class=hljs-string>"table_zerobus_sample"</span>,
+    );
+
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>table_properties</span> = TableProperties {
+        table_name: <span class=hljs-string>"workspace.default.zerobus_sample"</span>.<span class="hljs-title function_ invoke__">to_string</span>(),
+        descriptor_proto: <span class="hljs-title function_ invoke__">Some</span>(descriptor_proto),
+    };
+
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>stream_configuration_options</span> = StreamConfigurationOptions {
+        max_inflight_requests: <span class=hljs-number>100</span>,
+        <span class=hljs-comment>// RecordType::Proto is the default.</span>
+        ..<span class=hljs-built_in>Default</span>::<span class="hljs-title function_ invoke__">default</span>()
+    };
+
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>sdk_handle</span> = ZerobusSdk::<span class="hljs-title function_ invoke__">builder</span>()
+        .<span class="hljs-title function_ invoke__">endpoint</span>(SERVER_ENDPOINT)
+        .<span class="hljs-title function_ invoke__">unity_catalog_url</span>(DATABRICKS_WORKSPACE_URL)
+        .<span class="hljs-title function_ invoke__">build</span>()?;
+
+    <span class=hljs-keyword>let</span> <span class=hljs-keyword>mut </span><span class=hljs-variable>stream</span> = sdk_handle
+        .<span class="hljs-title function_ invoke__">create_stream</span>(
+            table_properties.<span class="hljs-title function_ invoke__">clone</span>(),
+            DATABRICKS_CLIENT_ID.<span class="hljs-title function_ invoke__">to_string</span>(),
+            DATABRICKS_CLIENT_SECRET.<span class="hljs-title function_ invoke__">to_string</span>(),
+            <span class="hljs-title function_ invoke__">Some</span>(stream_configuration_options),
+        )
+        .<span class=hljs-keyword>await</span>?;
+
+    <span class="hljs-title function_ invoke__">ingest_with_offset_api</span>(&<span class=hljs-keyword>mut</span> stream).<span class=hljs-keyword>await</span>?;
+
+    stream.<span class="hljs-title function_ invoke__">close</span>().<span class=hljs-keyword>await</span>?;
+    <span class=hljs-built_in>println!</span>(<span class=hljs-string>"Stream closed successfully"</span>);
+    <span class="hljs-title function_ invoke__">Ok</span>(())
+}
+
+<span class=hljs-comment>/// Recommended API: returns offset directly after queuing.</span>
+<span class=hljs-keyword>async</span> <span class=hljs-keyword>fn</span> <span class="hljs-title function_">ingest_with_offset_api</span>(stream: &<span class=hljs-keyword>mut</span> ZerobusStream) <span class=hljs-punctuation>-></span> anyhow::<span class=hljs-type>Result</span>&lt;()> {
+    <span class=hljs-built_in>println!</span>(<span class=hljs-string>"=== Offset-based API (Recommended) ==="</span>);
+
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>now</span> = chrono::Utc::<span class="hljs-title function_ invoke__">now</span>().<span class="hljs-title function_ invoke__">timestamp</span>();
+
+    <span class=hljs-comment>// 1. Auto-encoding: ProtoMessage - pass message directly, SDK handles encoding.</span>
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>order</span> = TableZerobusSample {
+        id: <span class="hljs-title function_ invoke__">Some</span>(<span class=hljs-number>1</span>),
+        name: <span class="hljs-title function_ invoke__">Some</span>(<span class=hljs-string>"test"</span>.<span class="hljs-title function_ invoke__">to_string</span>()),
+        create_at: <span class="hljs-title function_ invoke__">Some</span>(now),
+    };
+
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>offset_id</span> = stream.<span class="hljs-title function_ invoke__">ingest_record_offset</span>(<span class="hljs-title function_ invoke__">ProtoMessage</span>(order)).<span class=hljs-keyword>await</span>?;
+    <span class=hljs-built_in>println!</span>(<span class=hljs-string>"[Auto-encoding] Record sent with offset ID: {}"</span>, offset_id);
+    stream.<span class="hljs-title function_ invoke__">wait_for_offset</span>(offset_id).<span class=hljs-keyword>await</span>?;
+    <span class=hljs-built_in>println!</span>(
+        <span class=hljs-string>"[Auto-encoding] Record acknowledged with offset ID: {}"</span>,
+        offset_id
+    );
+
+    <span class="hljs-title function_ invoke__">Ok</span>(())
+}
+
+<span class=hljs-comment>// Load descriptor from generated files</span>
+<span class=hljs-keyword>fn</span> <span class="hljs-title function_">load_descriptor</span>(path: &<span class=hljs-type>str</span>, file: &<span class=hljs-type>str</span>, msg: &<span class=hljs-type>str</span>) <span class=hljs-punctuation>-></span> DescriptorProto {
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>bytes</span> = fs::<span class="hljs-title function_ invoke__">read</span>(path).<span class="hljs-title function_ invoke__">expect</span>(<span class=hljs-string>"Failed to read descriptor"</span>);
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>file_set</span> = FileDescriptorSet::<span class="hljs-title function_ invoke__">decode</span>(bytes.<span class="hljs-title function_ invoke__">as_ref</span>()).<span class="hljs-title function_ invoke__">unwrap</span>();
+
+    <span class=hljs-keyword>let</span> <span class=hljs-variable>file_desc</span> = file_set
+        .file
+        .<span class="hljs-title function_ invoke__">into_iter</span>()
+        .<span class="hljs-title function_ invoke__">find</span>(|f| f.name.<span class="hljs-title function_ invoke__">as_deref</span>() == <span class="hljs-title function_ invoke__">Some</span>(file))
+        .<span class="hljs-title function_ invoke__">unwrap</span>();
+
+    file_desc
+        .message_type
+        .<span class="hljs-title function_ invoke__">into_iter</span>()
+        .<span class="hljs-title function_ invoke__">find</span>(|m| m.name.<span class="hljs-title function_ invoke__">as_deref</span>() == <span class="hljs-title function_ invoke__">Some</span>(msg))
+        .<span class="hljs-title function_ invoke__">unwrap</span>()
+}
+</code></pre><p>実装できたら早速実行してみましょう。<pre><code class="language-txt hljs language-plaintext">Unsupported table kind. Tables created in default storage are not supported. Error Code: 4024, Error State: 0.
+</code></pre><p>無慈悲<h2>おわりに</h2><p><a href=https://docs.databricks.com/aws/en/ingestion/zerobus-limits#workspace-and-target-table>Zerobus Ingest connector limitations - Workspace and Target table</a><p>書いてある場所が移動しただけで、使えないんすね。<p>Free EditionでもS3を外部ロケーションとして登録してカタログをそっちに作成すれば使えるとは思いますが・・・<p>おわり</div></article><hr><nav class=post-navigation><ul><li>← Previous: <a href=/posts/2026/02-26-register-hf-mode-to-uc/ rel=prev>Hugging FaceのSentence TransformersモデルをUnity Catalogに登録してServing endpointsにデプロイしたい</a><li><strong>Next: <a href=/posts/2026/04-24-databricks-sdp-expenses/ rel=next>DatabricksのSpark Declarative Pipelinesを使って簡易的な家計簿を作りたい</a> →</strong></ul></nav></main><footer><div><a href=/feed.xml> <svg viewbox="0 0 16 16" height=16 width=16 xmlns=http://www.w3.org/2000/svg><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"></path><path d="M5.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-3-8.5a1 1 0 0 1 1-1c5.523 0 10 4.477 10 10a1 1 0 1 1-2 0 8 8 0 0 0-8-8 1 1 0 0 1-1-1zm0 4a1 1 0 0 1 1-1 6 6 0 0 1 6 6 1 1 0 1 1-2 0 4 4 0 0 0-4-4 1 1 0 0 1-1-1z"></path></svg> </a></div></footer>
