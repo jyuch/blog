@@ -2,7 +2,7 @@
 title: AWS Summit Japan 2026 に参加してきたお話
 description: AWS Summit Japan 2026 の参加記録です。
 date: 2026-06-28
-lastModified: 2026-06-28
+lastModified: 2026-08-04
 tags: aws
 ---
 
@@ -38,5 +38,13 @@ DatabricksのData + AI Summit 2026でも[Genie Ontology](https://www.databricks.
 
 Project Orionは個人的にはビッグニュースなのですが、誰も何も書いてないんですよね。
 もしかしたら私が幻覚を見せられていた説や、ほんとはしゃべっちゃいけない内容で途中から見せなくなったとかじゃないですよね・・・
+
+## 追記（2026年8月4日）
+
+Project Orionとして展示されていたものは[Context Ontology Accelerator](https://aws.github.io/context-ontology-accelerator/)という名前になってOSSで公開されたようです。
+
+すでにAWS Japanの方が記事を書いて下さっているようなので、そのうち触ってみたいですね。
+
+[オントロジーで AI に業務知識を渡す — AWS の OSS「Context Ontology Accelerator」を試してみた](https://zenn.dev/aws_japan/articles/context-ontology-accelerator-deploy)
 
 おわり
