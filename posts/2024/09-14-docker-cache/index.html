@@ -1,0 +1,57 @@
+<!doctype html><html lang=ja><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0" name=viewport><title>Docker Buildxでもキャッシュしたい - レンコン畑でつかまえて</title><meta content="Docker Buildxでのキャッシュについての解説です" name=description><link href=/pagefind/pagefind-ui.css rel=stylesheet><link href=/styles.css rel=stylesheet><link href=/feed.xml rel=alternate title=レンコン畑でつかまえて type=application/atom+xml><link href=/feed.json rel=alternate title=レンコン畑でつかまえて type=application/json><script src="https://www.googletagmanager.com/gtag/js?id=G-1F9LYQGGMB" async></script><script>window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-1F9LYQGGMB');</script><script src=/pagefind/pagefind-ui.js></script><script>window.addEventListener('DOMContentLoaded',()=>{new PagefindUI({"element":"#search","showImages":false,"excerptLength":0,"showEmptyFilters":true,"showSubResults":false,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"});});</script><body><nav class=navbar><a class=navbar-home href=/> <strong>レンコン畑でつかまえて</strong> </a><ul class=navbar-links><li><a href=/> Home </a><li><a href=/posts/> Archive </a><li><a href=https://about.jyuch.dev/> About Me </a></ul><div class=navbar-search><div id=search></div></div></nav><main class=body-post><article class=post data-pagefind-body><div class=post-header><h1 class=post-title>Docker Buildxでもキャッシュしたい</h1><nav class=post-tags><a class=tag href=/tags/docker/>docker</a></nav><time datetime="2024-09-14 00:00:00" class=post-date> September 14th, 2024 </time></div><div class=post-body><h2>はじめに</h2><p>しばらくぶりにDockerに触ったらなんかいろいろとキャッシュ周りが変わっていたのでそれについてです。<h2>Buildx</h2><p>どうも最近のDockerはMoby BuildKitを<code>docker</code>コマンドから透過的に扱えるようになったようです。 そして、BuildKitをDockerから使うための拡張がBuildxです。<p>BuildKit君はいい感じにキャッシュを扱えるようなので、その辺を確認してみましょう。<h2>パッケージマネージャ</h2><h3>APT</h3><p>昔は<code>apt-get</code>コマンドを鬼のように<code>&&</code>で連結して、最後に<code>rm -rf /var/lib/apt/lists/*</code>でキャッシュファイルを消し飛ばしてイメージをコンパクションするのがノウハウでした。<p>そうすると、イメージサイズは小さくなりますが毎回パッケージをダウンロードしてくることになるので、ビルド時間が伸びるという欠点がありました。<p>BuildKitは特定のディレクトリをキャッシュとしてマウントすることで、イメージの再ビルド時にそのディレクトリを復元することができます。<pre><code class="language-Dockerfile hljs"><span class=hljs-keyword>FROM</span> debian:bookworm
+
+<span class=hljs-keyword>RUN</span><span class=language-bash> <span class=hljs-built_in>rm</span> -f /etc/apt/apt.conf.d/docker-clean; \
+    <span class=hljs-built_in>echo</span> <span class=hljs-string>'Binary::apt::APT::Keep-Downloaded-Packages "true";'</span> \
+      > /etc/apt/apt.conf.d/keep-cache</span>
+
+<span class=hljs-keyword>RUN</span><span class=language-bash> --mount=<span class=hljs-built_in>type</span>=cache,target=/var/cache/apt,sharing=locked \
+    --mount=<span class=hljs-built_in>type</span>=cache,target=/var/lib/apt,sharing=locked \
+    <span class=hljs-built_in>set</span> -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      sl;</span>
+</code></pre><p><code>apt-get</code>のタイミングでリポジトリキャッシュを<code>cache</code>タイプでマウントしています。 こうすることで2回目以降は普通の<code>apt</code>のようにパッケージキャッシュを使ってくれるようです。<p>ところで、初段のステージで<code>/etc/apt/apt.conf.d/docker-clean</code>を消し去ってますね。<p>Dockerだとキャッシュが刺さってイメージが肥大化するから<code>apt</code>の最後にキャッシュを消し飛ばすようにしている設定ファイルのようです。<p>じゃあ何すか<p><code>rm -rf /var/lib/apt/lists/*</code>は無駄だったって事すか<h3>DNF</h3><p>DNF君も基本的には同じです。<p>Amazon Linux 2023のベースイメージではダウンロードキャッシュをしないようにしていたので、ダウンロードキャッシュをする設定を挟んでから<code>dnf install</code>します。<pre><code class="language-Dockerfile hljs"><span class=hljs-keyword>FROM</span> amazonlinux:<span class=hljs-number>2023</span>
+
+<span class=hljs-keyword>RUN</span><span class=language-bash> <span class=hljs-built_in>echo</span> <span class=hljs-string>"keepcache=True"</span> >> /etc/dnf/dnf.conf</span>
+
+<span class=hljs-keyword>RUN</span><span class=language-bash> --mount=<span class=hljs-built_in>type</span>=cache,target=/var/cache/dnf \
+    --mount=<span class=hljs-built_in>type</span>=cache,target=/var/lib/dnf \
+    dnf install -y \
+      gcc gcr lvm2 clang</span>
+</code></pre><h3>YUM</h3><p>CentOS7がEoLを迎えてもう<code>yum</code>コマンドを打つ機会はない。そんなふうに考えていた時期が俺にもありました<p>AWS Lambdaの（少なくともPythonの）ベースイメージがAmazon Linuxが2なんですよね。<pre><code class="language-Dockerfile hljs"><span class=hljs-keyword>FROM</span> amazonlinux:<span class=hljs-number>2</span>
+
+<span class=hljs-keyword>RUN</span><span class=language-bash> sed -i -e <span class=hljs-string>'s/keepcache=0/keepcache=1/'</span> /etc/yum.conf</span>
+
+<span class=hljs-keyword>RUN</span><span class=language-bash> --mount=<span class=hljs-built_in>type</span>=cache,target=/var/cache/yum \
+    yum install -y \
+      gcc gcr lvm2 clang</span>
+</code></pre><h2>ビルドシステム</h2><h3>Rust</h3><p>ビルド激重Rust君です。<pre><code class="language-Dockerfile hljs"><span class=hljs-keyword>FROM</span> rust:<span class=hljs-number>1.81</span>.<span class=hljs-number>0</span>-slim AS build
+
+<span class=hljs-keyword>WORKDIR</span><span class=language-bash> /app</span>
+
+<span class=hljs-keyword>RUN</span><span class=language-bash> --mount=<span class=hljs-built_in>type</span>=<span class=hljs-built_in>bind</span>,<span class=hljs-built_in>source</span>=src,target=src \
+    --mount=<span class=hljs-built_in>type</span>=<span class=hljs-built_in>bind</span>,<span class=hljs-built_in>source</span>=Cargo.toml,target=Cargo.toml \
+    --mount=<span class=hljs-built_in>type</span>=<span class=hljs-built_in>bind</span>,<span class=hljs-built_in>source</span>=Cargo.lock,target=Cargo.lock \
+    --mount=<span class=hljs-built_in>type</span>=cache,target=/app/target/ \
+    --mount=<span class=hljs-built_in>type</span>=cache,target=/usr/local/cargo/git/db \
+    --mount=<span class=hljs-built_in>type</span>=cache,target=/usr/local/cargo/registry \
+    <span class=hljs-built_in>set</span> -eux; \
+    cargo build --locked --release; \
+    <span class=hljs-built_in>cp</span> ./target/release/hello_rust /bin/hello_rust</span>
+
+<span class=hljs-keyword>FROM</span> debian:stable-slim AS final
+<span class=hljs-keyword>COPY</span><span class=language-bash> --from=build /bin/hello_rust /bin/hello_rust</span>
+<span class=hljs-keyword>ENTRYPOINT</span><span class=language-bash> [<span class=hljs-string>"/bin/hello_rust"</span>]</span>
+</code></pre><p>ソース類は<code>bind</code>でマウントしてしまえばそもそもビルドステージへの転送すら不要なようです。<p>あとはcargoのパッケージキャッシュとビルドキャッシュを<code>cache</code>でバインドすれば余計なパッケージの再取得やリビルドが走りません。<p>あとはいつものように最終的なイメージをビルドしているステージに成果物を送り込めば完了です。<h3>Python</h3><p>最近触っているのでまぁ一応Pythonも確認してみましょう。<pre><code class="language-Dockerfile hljs"><span class=hljs-keyword>FROM</span> python:<span class=hljs-number>3.12</span>-bookworm
+
+<span class=hljs-keyword>RUN</span><span class=language-bash> --mount=<span class=hljs-built_in>type</span>=<span class=hljs-built_in>bind</span>,<span class=hljs-built_in>source</span>=requirements.txt,target=requirements.txt \
+    --mount=<span class=hljs-built_in>type</span>=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt</span>
+
+<span class=hljs-keyword>COPY</span><span class=language-bash> main.py .</span>
+
+<span class=hljs-keyword>CMD</span><span class=language-bash> [<span class=hljs-string>"python"</span>, <span class=hljs-string>"main.py"</span>]</span>
+</code></pre><p>Rustと同じようにパッケージマネージャのキャッシュをそのまま<code>cache</code>でマウントするだけです。<p>おわり</div></article><hr><nav class=post-navigation><ul><li>← Previous: <a href=/posts/2024/07-09-pyenv/ rel=prev>Windowsでもpyenvを使いたい</a><li><strong>Next: <a href=/posts/2024/12-20-openjdk-self-build/ rel=next>WindowsでもOpenJDKを野良ビルドしたい</a> →</strong></ul></nav></main><footer><div><a href=/feed.xml> <svg viewbox="0 0 16 16" height=16 width=16 xmlns=http://www.w3.org/2000/svg><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"></path><path d="M5.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-3-8.5a1 1 0 0 1 1-1c5.523 0 10 4.477 10 10a1 1 0 1 1-2 0 8 8 0 0 0-8-8 1 1 0 0 1-1-1zm0 4a1 1 0 0 1 1-1 6 6 0 0 1 6 6 1 1 0 1 1-2 0 4 4 0 0 0-4-4 1 1 0 0 1-1-1z"></path></svg> </a></div></footer>

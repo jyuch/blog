@@ -1,0 +1,68 @@
+<!doctype html><html lang=ja><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0" name=viewport><title>k3sでもローカルなDockerリポジトリを使用したい - レンコン畑でつかまえて</title><meta content="k3sからSonatype Nexusを使用したローカルのコンテナリポジトリにアクセスする方法を確認します" name=description><link href=/pagefind/pagefind-ui.css rel=stylesheet><link href=/styles.css rel=stylesheet><link href=/feed.xml rel=alternate title=レンコン畑でつかまえて type=application/atom+xml><link href=/feed.json rel=alternate title=レンコン畑でつかまえて type=application/json><script src="https://www.googletagmanager.com/gtag/js?id=G-1F9LYQGGMB" async></script><script>window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-1F9LYQGGMB');</script><script src=/pagefind/pagefind-ui.js></script><script>window.addEventListener('DOMContentLoaded',()=>{new PagefindUI({"element":"#search","showImages":false,"excerptLength":0,"showEmptyFilters":true,"showSubResults":false,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"});});</script><body><nav class=navbar><a class=navbar-home href=/> <strong>レンコン畑でつかまえて</strong> </a><ul class=navbar-links><li><a href=/> Home </a><li><a href=/posts/> Archive </a><li><a href=https://about.jyuch.dev/> About Me </a></ul><div class=navbar-search><div id=search></div></div></nav><main class=body-post><article class=post data-pagefind-body><div class=post-header><h1 class=post-title>k3sでもローカルなDockerリポジトリを使用したい</h1><nav class=post-tags><a class=tag href=/tags/k8s/>k8s</a><a class=tag href=/tags/k3s/>k3s</a></nav><time datetime="2022-11-16 00:00:00" class=post-date> November 16th, 2022 </time></div><div class=post-body><h2>はじめに</h2><p><a href=/posts/2022/build-container-image-in-k3s-using-buildkit/>前回</a>k3s上でBuildKitを使用してコンテナイメージをビルドしてそのままk3sに読み込ませるという割と強引な事をやったのですが、やっぱりちゃんとコンテナレジストリを立てて運用した方がいろいろ良いよねというお話です。<p>今回はローカルにコンテナレジストリを立てて、Pull-throughなキャッシュを立ててDocker Hub君を労わりつつ、独自のイメージをホストさせます。<h2>コンテナレジストリ</h2><p>今回はコンテナレジストリとして<a href=https://www.sonatype.com/products/repository-oss-download>Sonatype Nexus Repository Manager OSS</a>を使用します。<p>以下のような感じでリポジトリを立てます。<table><thead><tr><th style=text-align:left>名前<th style=text-align:left>タイプ<th style=text-align:left>ポート<th style=text-align:left>説明<tbody><tr><td style=text-align:left>docker-group<td style=text-align:left>group<td style=text-align:left>9000<td style=text-align:left>下の二つのリポジトリを仮想的にまとめるリポジトリ<tr><td style=text-align:left>docker-hosted<td style=text-align:left>hosted<td style=text-align:left>9001<td style=text-align:left>独自のコンテナイメージをホストするリポジトリ<tr><td style=text-align:left>docker.io-proxy<td style=text-align:left>proxy<td style=text-align:left>9002<td style=text-align:left>Docker Hubのミラーキャッシュ</table><p>k3s側でクレデンシャルをｺﾈｺﾈするのがめんどくさいので私は「Allow anonymous doker pull」にチェックボックスを入れて匿名でのpullを許可させましたが、この辺は組織のポリシーでいい感じに設定すればいいと思います。<p>また、「Anonymous Access」から「Allow anonimous user to access the server」にチェックを入れ、「Realms」で「Docker Bearer Token Realms」を有効にしておかないと匿名のpullが弾かれます。（1敗）<h2>Docker側の設定</h2><p>そうしたらまずDockerがこのリポジトリからpull出来るようにします。<p>お好みに合わせて、<code>/etc/hosts</code>にリポジトリをホストしているサーバのIPアドレスを追加します。 長いとイメージ名を指定するときにつらいので、私は<code>ocr</code>みたいに短い名前にしてしまっています。<p><code>/etc/docker/daemon.json</code>でDocker Hubの代わりにアクセスするレジストリミラーとhttpでアクセスするためのおまじないを設定します。<pre><code class="language-json hljs"><span class=hljs-punctuation>{</span>
+  <span class=hljs-attr>"insecure-registries"</span><span class=hljs-punctuation>:</span> <span class=hljs-punctuation>[</span><span class=hljs-string>"ocr:9000"</span><span class=hljs-punctuation>,</span> <span class=hljs-string>"ocr:9001"</span><span class=hljs-punctuation>]</span><span class=hljs-punctuation>,</span>
+  <span class=hljs-attr>"registry-mirrors"</span><span class=hljs-punctuation>:</span> <span class=hljs-punctuation>[</span><span class=hljs-string>"http://ocr:9000"</span><span class=hljs-punctuation>]</span>
+<span class=hljs-punctuation>}</span>
+</code></pre><p>勘のいい人は気が付いたかと思いますが、docker-groupの9000だけではなくdocker-hostedの9001も登録しています。<p>弊社も動作検証中に気が付いたのですが、OSSのNexus君はgroupリポジトリへのpushは出来ないみたいです。<p>そのため、イメージのpushはhosted側に行い、pullはgroup側から行うことにしました。<pre><code class="language-sh hljs language-bash"><span class=hljs-comment># Sonatype社からの課金のお誘い</span>
+$ docker push ocr:9000/jyuch/blog:20221115   
+The push refers to repository [ocr:9000/jyuch/blog]
+a2a9af77c400: Layer already exists 
+a2e59a79fae0: Layer already exists 
+4091cd312f19: Layer already exists 
+9e7119c28877: Layer already exists 
+2280b348f4d6: Layer already exists 
+e74d0d8d2def: Layer already exists 
+a12586ed027f: Layer already exists 
+denied: Deploying to <span class=hljs-built_in>groups</span> is a PRO-licensed feature. See https://links.sonatype.com/product-nexus-repository
+</code></pre><p>あとは<code>ocr:9001</code>側で<code>docker login</code>をすればOKです。<pre><code class="language-sh hljs language-bash">docker login ocr:9001
+Username: kawata
+Password: 
+WARNING! Your password will be stored unencrypted <span class=hljs-keyword>in</span> /home/jyuch/.docker/config.json.
+Configure a credential helper to remove this warning. See
+https://docs.docker.com/engine/reference/commandline/login/#credentials-store
+
+Login Succeeded
+</code></pre><h2>k3s</h2><p>とりあえずDocker側pushとpullが出来ることを確認できたら、次はk3s側です。<p>同様に<code>/etc/hosts</code>を編集し、<code>/etc/rancher/k3s/registries.yaml</code>を編集します。<pre><code class="language-yaml hljs"><span class=hljs-attr>mirrors:</span>
+  <span class=hljs-attr>docker.io:</span>
+    <span class=hljs-attr>endpoint:</span>
+      <span class=hljs-bullet>-</span> <span class=hljs-string>"http://ocr:9000"</span>
+  <span class=hljs-attr>"ocr:9000":</span>
+    <span class=hljs-attr>endpoint:</span>
+      <span class=hljs-bullet>-</span> <span class=hljs-string>"http://ocr:9000"</span>
+</code></pre><p>こちらではイメージのpushはしない為、group側の設定だけで大丈夫です。<p>適当なPodを展開してちゃんとイメージを引っ張ってきて来れているかを確認します。<pre><code class="language-yaml hljs"><span class=hljs-meta>---</span>
+<span class=hljs-attr>apiVersion:</span> <span class=hljs-string>apps/v1</span>
+<span class=hljs-attr>kind:</span> <span class=hljs-string>Deployment</span>
+<span class=hljs-attr>metadata:</span>
+  <span class=hljs-attr>name:</span> <span class=hljs-string>blog-nginx-deployment</span>
+<span class=hljs-attr>spec:</span>
+  <span class=hljs-attr>replicas:</span> <span class=hljs-number>3</span>
+  <span class=hljs-attr>selector:</span>
+    <span class=hljs-attr>matchLabels:</span>
+      <span class=hljs-attr>app:</span> <span class=hljs-string>blog-nginx</span>
+  <span class=hljs-attr>template:</span>
+    <span class=hljs-attr>metadata:</span>
+      <span class=hljs-attr>labels:</span>
+        <span class=hljs-attr>app:</span> <span class=hljs-string>blog-nginx</span>
+    <span class=hljs-attr>spec:</span>
+      <span class=hljs-attr>containers:</span>
+      <span class=hljs-bullet>-</span> <span class=hljs-attr>name:</span> <span class=hljs-string>blog-container</span>
+        <span class=hljs-attr>image:</span> <span class=hljs-string>ocr:9000/jyuch/blog:20221116</span>
+        <span class=hljs-attr>ports:</span>
+          <span class=hljs-bullet>-</span> <span class=hljs-attr>containerPort:</span> <span class=hljs-number>80</span>
+<span class=hljs-meta>---</span>
+<span class=hljs-attr>apiVersion:</span> <span class=hljs-string>v1</span>
+<span class=hljs-attr>kind:</span> <span class=hljs-string>Service</span>
+<span class=hljs-attr>metadata:</span>
+  <span class=hljs-attr>name:</span> <span class=hljs-string>blog-nginx</span>
+<span class=hljs-attr>spec:</span>
+  <span class=hljs-attr>type:</span> <span class=hljs-string>LoadBalancer</span>
+  <span class=hljs-attr>ports:</span>
+    <span class=hljs-bullet>-</span> <span class=hljs-attr>name:</span> <span class=hljs-string>"http-port"</span>
+      <span class=hljs-attr>protocol:</span> <span class=hljs-string>"TCP"</span>
+      <span class=hljs-attr>port:</span> <span class=hljs-number>18080</span>
+      <span class=hljs-attr>targetPort:</span> <span class=hljs-number>80</span>
+  <span class=hljs-attr>selector:</span>
+    <span class=hljs-attr>app:</span> <span class=hljs-string>blog-nginx</span>
+</code></pre><h2>おわりに</h2><p>とりあえずこれでPull-throughなキャッシュと独自リポジトリが立てられました。<p>なんかBuildKit側がPull-throughキャッシュを見ていない疑惑がありますが、そもそもあの子キャッシュの扱いがよくわかんないのでまぁその辺はおいおい確認していきます。<p>おわり</div></article><hr><nav class=post-navigation><ul><li>← Previous: <a href=/posts/2022/build-container-image-in-k3s-using-buildkit/ rel=prev>k3sでもBuildKitを使用してイメージをビルドしたい</a><li><strong>Next: <a href=/posts/2023/03-03-look-back-2022/ rel=next>2022年の振り返りとか</a> →</strong></ul></nav></main><footer><div><a href=/feed.xml> <svg viewbox="0 0 16 16" height=16 width=16 xmlns=http://www.w3.org/2000/svg><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"></path><path d="M5.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-3-8.5a1 1 0 0 1 1-1c5.523 0 10 4.477 10 10a1 1 0 1 1-2 0 8 8 0 0 0-8-8 1 1 0 0 1-1-1zm0 4a1 1 0 0 1 1-1 6 6 0 0 1 6 6 1 1 0 1 1-2 0 4 4 0 0 0-4-4 1 1 0 0 1-1-1z"></path></svg> </a></div></footer>
