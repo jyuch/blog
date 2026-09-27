@@ -12,6 +12,10 @@
     "lume": {
       "description": "Run Lume command",
       "command": "deno run -P=lume lume/cli.ts"
+    },
+    "new": {
+      "description": "Create new content or code using artifacts",
+      "command": "deno task lume new"
     }
   },
   "fmt": {
@@ -37,7 +41,7 @@
   ],
   "lint": {
     "plugins": [
-      "https://cdn.jsdelivr.net/gh/lumeland/lume@3.2.4/lint.ts"
+      "https://cdn.jsdelivr.net/gh/lumeland/lume@3.3.2/lint.ts"
     ],
     "rules": {
       "exclude": [
@@ -73,7 +77,8 @@
   "lock": false,
   "allowScripts": {
     "deny": [
-      "npm:sharp"
+      "npm:sharp",
+      "npm:@parcel/watcher"
     ]
   }
 }
