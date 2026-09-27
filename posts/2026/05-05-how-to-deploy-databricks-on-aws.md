@@ -113,9 +113,8 @@ UCがデータの入れ物であるならば、ワークスペースはプログ
   - メリット
     - 起動がほぼ一瞬
   - デメリット
-    - サイズはいくつかのサイズから選ぶだけで、細かい調整は出来ない
     - （[PrivteLinkの設定をしないと](https://docs.databricks.com/aws/en/security/network/serverless-network-security/pl-to-internal-network)）オンプレミスのリソースには接続しに行けないうえに、PrivateLinkは追加のコストが掛かる
-    - GPUは使えない
+    - ~~GPUは使えない~~プレビューで使えるようになった
 
 ## インフラ設計
 
@@ -332,7 +331,7 @@ Databricksはなぜかすごい勢いで機能の名前を変更します。
 - Spark Declarative Pipelines（旧：Delta Live Table）
 - Declarative Automation Bundles（旧：Databricks Asset Bundles）
 - OpenSharing（旧：Delta Sharing）
-- Genie Agents（旧：Genie Spaces）← New!
+- Genie Agents（旧：Genie Spaces）
 
 まぁ、ブランディングとか関連機能との整合性とかあるのでしょうがないのかもしれませんが、他の人と機能のことを話す際に「この人はどっちで覚えてるだろうか」みたいな余計な気を遣わないといけないので少し面倒です。
 
