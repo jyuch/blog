@@ -1,0 +1,174 @@
+<!doctype html><html lang=ja><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0" name=viewport><title>Databricksでもdbtを動かしてみたい - レンコン畑でつかまえて</title><meta content=Databricksをターゲットとしてdbtを動かしてみます。 name=description><link href=/pagefind/pagefind-ui.css rel=stylesheet><link href=/styles.css rel=stylesheet><link href=/feed.xml rel=alternate title=レンコン畑でつかまえて type=application/atom+xml><link href=/feed.json rel=alternate title=レンコン畑でつかまえて type=application/json><script src="https://www.googletagmanager.com/gtag/js?id=G-1F9LYQGGMB" async></script><script>window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-1F9LYQGGMB');</script><script src=/pagefind/pagefind-ui.js></script><script>window.addEventListener('DOMContentLoaded',()=>{new PagefindUI({"element":"#search","showImages":false,"excerptLength":0,"showEmptyFilters":true,"showSubResults":false,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"});});</script><body><nav class=navbar><a class=navbar-home href=/> <strong>レンコン畑でつかまえて</strong> </a><ul class=navbar-links><li><a href=/> Home </a><li><a href=/posts/> Archive </a><li><a href=https://about.jyuch.dev/> About Me </a></ul><div class=navbar-search><div id=search></div></div></nav><main class=body-post><article class=post data-pagefind-body><div class=post-header><h1 class=post-title>Databricksでもdbtを動かしてみたい</h1><nav class=post-tags><a class=tag href=/tags/databricks/>databricks</a><a class=tag href=/tags/dbt/>dbt</a></nav><time datetime="2026-09-05 00:00:00" class=post-date> September 5th, 2026 </time></div><div class=post-body><h2>はじめに</h2><p>Databricksには<a href=https://www.databricks.com/jp/product/data-engineering/spark-declarative-pipelines>Apache Spark™ 宣言型パイプライン</a>といういい感じにデータを精錬するための機能があります。<p>同様の機能を持つ製品として<a href=https://www.getdbt.com/>dbt</a>があります。 DatabricksだけであればSDPで十分ですが、触ったことすらないのは問題かなと思い試してみました。<h2>PATの払い出し</h2><p>dbtからDatabricksを触りに行くために、PATを発行しておきます。<p>めんどくさかったので私はAPI scopeを<code>all-apis</code>で発行してしまいましたが、たぶん<code>sql</code>があれば大丈夫かもしれません。しらんけど<h2>dbt環境のセットアップ</h2><p>Databricksの公式ドキュメントに<a href=https://docs.databricks.com/aws/ja/partners/prep/dbt>セットアップ方法が載っている</a>ので、その通りにセットアップします。<p>Databricks曰くPythonの仮想環境を別途用意して、その上にインストールしろとのことです。<p>私はuvを使用しているので、uv環境セットアップします。<pre><code class="language-sh hljs language-bash">uv init -p 3.11
+</code></pre><p>dbtの<a href="https://docs.getdbt.com/docs/local/install-dbt?version=2">Get started</a>ではバージョン2を進められるのですが、どうもプレリリースのようなので<code>--prerelease allow</code>を指定してインストールします。<pre><code class="language-sh hljs language-bash">uv add dbt --prerelease allow
+</code></pre><p>あとは、dbtをDatabrickcsにつなげるために<a href=https://github.com/databricks/dbt-databricks>Databricksアダプター</a>をインストールします。<pre><code class="language-sh hljs language-bash">uv add dbt-databricks
+</code></pre><p>アダプターのインストールが完了したら、dbtのプロジェクトを初期化します。<pre><code class="language-sh hljs language-bash">uv run dbt init my_dbt_demo
+</code></pre><p>対話形式でいろいろ聞かれるので、番号で答えたり実際の値を入力したりします。<pre><code class="language-txt hljs language-plaintext">04:55:39  Running with dbt=1.12.3
+04:55:39  Creating dbt configuration folder at C:\Users\someone\.dbt
+04:55:39  Setting up your profile.
+Which database would you like to use?
+[1] databricks
+[2] spark
+
+(Don't see the one you want? https://docs.getdbt.com/docs/available-adapters)
+
+Enter a number: 1 👈 Databricksにつなぐので「１」
+host (yourorg.databricks.com): dbc-12345678-abcd.cloud.databricks.com 👈 ワークスペースのホスト
+http_path (HTTP Path): /sql/1.0/warehouses/abc123456789a123 👈 SQL WarehousesのHTTPパス
+[1] use access token
+Desired access token option (enter a number): 1 👈 トークンを使用するので「1」
+token (dapiXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX): 👈 トークンを入力
+[1] use Unity Catalog
+[2] not use Unity Catalog
+Desired unity catalog option (enter a number): 1 👈 UCを使用するので「1」
+catalog (initial catalog): dbt 👈 カタログ名を入力
+schema (default schema that dbt will build objects in): default 👈 スキーマ名を入力
+threads (1 or more) [1]: 👈 同時実行するスレッド数を入力？
+04:59:06  Profile my_dbt_demo written to C:\Users\someone\.dbt\profiles.yml using target's profile_template.yml and your supplied values.
+04:59:06  Running dbt debug to validate the project...
+04:59:06  dbt version: 1.12.3
+04:59:06  python version: 3.11.15
+04:59:06  python path: C:\dev\try-databricks-dbt\.venv\Scripts\python.exe
+04:59:06  os info: Windows-10-10.0.26200-SP0
+04:59:06  Using profiles dir at C:\Users\someone\.dbt
+04:59:06  Using profiles.yml file at C:\Users\someone\.dbt\profiles.yml
+04:59:06  Using dbt_project.yml file at C:\dev\try-databricks-dbt\my_dbt_demo\dbt_project.yml
+04:59:06  adapter type: databricks
+04:59:06  adapter version: 1.12.5
+04:59:06  Configuration:
+04:59:06    profiles.yml file [OK found and valid]
+04:59:06    dbt_project.yml file [OK found and valid]
+04:59:06  Required dependencies:
+04:59:06   - git [OK found]
+
+04:59:06  Connection:
+04:59:06    host: dbc-52ec1bce-aed0.cloud.databricks.com
+04:59:06    http_path: /sql/1.0/warehouses/ca9667106d87a573
+04:59:06    catalog: dbt
+04:59:06    schema: default
+04:59:06  Registered adapter: databricks=1.12.5
+04:59:07  Databricks adapter:   SPOG host (host_type='workspace'): no
+04:59:07  Databricks adapter:   workspace_id (from ?o= in http_path): None
+04:59:07  Databricks adapter:   databricks-sql-connector version: 4.4.0 (supported)
+04:59:07  Databricks adapter:   databricks-sdk version: 0.117.0 (supported)
+04:59:21    Connection test: [OK connection ok]
+
+04:59:21  All checks passed!
+04:59:21  Your new dbt project "my_dbt_demo" was created!
+Initialized new project in C:\dev\try-databricks-dbt\my_dbt_demo\my_dbt_demo
+
+For more information on how to configure the profiles.yml file,
+please consult the dbt documentation here:
+
+  https://docs.getdbt.com/docs/configure-your-profile
+
+One more thing:
+
+Need help? Don't hesitate to reach out to us via GitHub issues or on Slack:
+
+  https://community.getdbt.com/
+
+Happy modeling!
+</code></pre><p>初期化が終わるとプロジェクトのディレクトリが作成されているので、移動します。<pre><code class="language-sh hljs language-bash"><span class=hljs-built_in>cd</span> .\my_dbt_demo\
+</code></pre><p>ちゃんと初期化できているか動作確認をします。 色々出てきますが、<code>All checks passed!</code>と出ればOKなんだと思います。<pre><code class="language-sh hljs language-bash">uv run dbt debug
+</code></pre><pre><code class="language-txt hljs language-plaintext">05:02:37  Running with dbt=1.12.3
+05:02:37  dbt version: 1.12.3
+05:02:37  python version: 3.11.15
+05:02:37  python path: C:\dev\try-databricks-dbt\.venv\Scripts\python.exe
+05:02:37  os info: Windows-10-10.0.26200-SP0
+05:02:38  Using profiles dir at C:\Users\someone\.dbt
+05:02:38  Using profiles.yml file at C:\Users\someone\.dbt\profiles.yml
+05:02:38  Using dbt_project.yml file at C:\dev\try-databricks-dbt\my_dbt_demo\dbt_project.yml
+05:02:38  adapter type: databricks
+05:02:38  adapter version: 1.12.5
+05:02:38  Configuration:
+05:02:38    profiles.yml file [OK found and valid]
+05:02:38    dbt_project.yml file [OK found and valid]
+05:02:38  Required dependencies:
+05:02:38   - git [OK found]
+
+05:02:38  Connection:
+05:02:38    host: dbc-52ec1bce-aed0.cloud.databricks.com
+05:02:38    http_path: /sql/1.0/warehouses/ca9667106d87a573
+05:02:38    catalog: dbt
+05:02:38    schema: default
+05:02:38  Registered adapter: databricks=1.12.5
+05:02:39  Databricks adapter:   SPOG host (host_type='workspace'): no
+05:02:39  Databricks adapter:   workspace_id (from ?o= in http_path): None
+05:02:39  Databricks adapter:   databricks-sql-connector version: 4.4.0 (supported)
+05:02:39  Databricks adapter:   databricks-sdk version: 0.117.0 (supported)
+05:02:42    Connection test: [OK connection ok]
+
+05:02:42  All checks passed!
+</code></pre><h2>モデリングする</h2><h3>サンプルデータの作成</h3><p><a href=https://docs.databricks.com/aws/en/integrations/dbt-core-tutorial>公式のチュートリアル</a>に沿って、いろいろと試してみましょう。<p>チュートリアルははじめにサンプルテーブルを作るように言いますが、なんとコード例が動きません。 ですので、あきらめてそれっぽい等価なSQLに書き換えて実行します。<pre><code class="language-sql hljs"><span class=hljs-keyword>CREATE</span> <span class=hljs-keyword>OR</span> REPLACE <span class=hljs-keyword>TABLE</span> diamonds <span class=hljs-keyword>AS</span>
+<span class=hljs-keyword>SELECT</span>
+  <span class=hljs-operator>*</span>
+<span class=hljs-keyword>FROM</span>
+  read_files(
+    "/Volumes/samples/databricks/datasets/Rdatasets/data-001/csv/ggplot2/diamonds.csv",
+    format <span class=hljs-operator>=</span><span class=hljs-operator>></span> <span class=hljs-string>'csv'</span>,
+    header <span class=hljs-operator>=</span><span class=hljs-operator>></span> <span class=hljs-literal>true</span>
+  )
+</code></pre><h3>モデルの作成</h3><p>すでに公式チュートリアルを脱線しますが、dbt上でちゃんとリネージを扱えるように先ほど作成したテーブルをソーステーブルとして登録します。<p><code>models/sources.yml</code>みたいなファイルに定義するようです。<pre><code class="language-yaml hljs"><span class=hljs-attr>version:</span> <span class=hljs-number>2</span>
+
+<span class=hljs-attr>sources:</span>
+  <span class=hljs-bullet>-</span> <span class=hljs-attr>name:</span> <span class=hljs-string>diamonds_raw</span>
+    <span class=hljs-attr>catalog:</span> <span class=hljs-string>dbt</span>
+    <span class=hljs-attr>schema:</span> <span class=hljs-string>default</span>
+    <span class=hljs-attr>tables:</span>
+      <span class=hljs-bullet>-</span> <span class=hljs-attr>name:</span> <span class=hljs-string>diamonds</span>
+</code></pre><p>そうすると、<code>{{ source('diamonds_raw', 'diamonds') }}</code>のような表記で参照できるようになるので、各モデル内で参照します。<pre><code class="language-sql hljs">{{
+  config(materialized <span class=hljs-operator>=</span> <span class=hljs-string>'table'</span>, file_format <span class=hljs-operator>=</span> <span class=hljs-string>'delta'</span>)
+}}
+<span class=hljs-keyword>SELECT</span>
+  carat,
+  cut,
+  color,
+  clarity
+<span class=hljs-keyword>FROM</span>
+  {{ source(<span class=hljs-string>'diamonds_raw'</span>, <span class=hljs-string>'diamonds'</span>) }}
+</code></pre><pre><code class="language-sql hljs">{{
+  config(materialized <span class=hljs-operator>=</span> <span class=hljs-string>'materialized_view'</span>)
+}}
+<span class=hljs-keyword>SELECT</span> <span class=hljs-keyword>DISTINCT</span>
+  color
+<span class=hljs-keyword>FROM</span>
+  {{ <span class=hljs-keyword>ref</span>(<span class=hljs-string>'diamonds_four_cs'</span>) }}
+<span class=hljs-keyword>ORDER</span> <span class=hljs-keyword>BY</span>
+  color <span class=hljs-keyword>ASC</span>
+</code></pre><pre><code class="language-sql hljs"><span class=hljs-keyword>SELECT</span>
+  color,
+  <span class=hljs-built_in>avg</span>(price) <span class=hljs-keyword>AS</span> price
+<span class=hljs-keyword>FROM</span>
+  {{ source(<span class=hljs-string>'diamonds_raw'</span>, <span class=hljs-string>'diamonds'</span>) }}
+<span class=hljs-keyword>GROUP</span> <span class=hljs-keyword>BY</span>
+  color
+<span class=hljs-keyword>ORDER</span> <span class=hljs-keyword>BY</span>
+  price <span class=hljs-keyword>DESC</span>
+</code></pre><p>コマンドを実行すると、それぞれテーブルやマテリアライズドビュー・ビューが生えてきます。<pre><code class="language-sh hljs language-bash">uv run dbt run
+</code></pre><pre><code class="language-txt hljs language-plaintext">07:37:47  Running with dbt=1.12.3
+07:37:48  Registered adapter: databricks=1.12.5
+07:37:48  [WARNING]: Configuration paths exist in your dbt_project.yml file which do not apply to any resources.
+There are 1 unused configuration paths:
+- models.my_dbt_demo.example
+07:37:48  Found 3 models, 1 source, 773 macros
+07:37:48
+07:37:48  Concurrency: 1 threads (target='dev')
+07:37:48
+07:37:54  1 of 3 START sql table model default.diamonds_four_cs .......................... [RUN]
+07:37:57  1 of 3 OK created sql table model default.diamonds_four_cs ..................... [OK in 3.73s]
+07:37:57  2 of 3 START sql view model default.diamonds_prices ............................ [RUN]
+07:37:59  2 of 3 OK created sql view model default.diamonds_prices ....................... [OK in 1.92s]
+07:37:59  3 of 3 START sql materialized_view model default.diamonds_list_colors .......... [RUN]
+07:38:47  3 of 3 OK created sql materialized_view model default.diamonds_list_colors ..... [OK in 47.59s]
+07:38:47
+07:38:47  Finished running 1 materialized view model, 1 table model, 1 view model in 0 hours 0 minutes and 58.55 seconds (58.55s).
+07:38:47
+07:38:47  Completed successfully
+07:38:47
+07:38:47  Done. PASS=3 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=3
+</code></pre><p><img alt=作成されたテーブル src=/img/2026/09-05-databricks-dbt/created-tables.png><h3>リネージの確認</h3><pre><code class="language-sh hljs language-bash">uv run dbt docs generate
+</code></pre><pre><code class="language-sh hljs language-bash">uv run dbt docs serve
+</code></pre><p>とすると、ローカルサーバーが起動してモデル間のリネージが見られるようになります。<p><img alt=生成されたリネージ図 src=/img/2026/09-05-databricks-dbt/dbt-dag.png><h2>おわりに</h2><p>いったんはここまでとしますが、中身はJinjaテンプレートらしく、いろいろと作りこめるそうなので今後もいろいろと触ってみたいですね。<p>おわり</div></article><hr><nav class=post-navigation><ul><li>← Previous: <a href=/posts/2026/08-14-databricks-sdk-auth/ rel=prev>Databricks SDKでも統合認証を使いたい</a></ul></nav></main><footer><div><a href=/feed.xml> <svg viewbox="0 0 16 16" height=16 width=16 xmlns=http://www.w3.org/2000/svg><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"></path><path d="M5.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-3-8.5a1 1 0 0 1 1-1c5.523 0 10 4.477 10 10a1 1 0 1 1-2 0 8 8 0 0 0-8-8 1 1 0 0 1-1-1zm0 4a1 1 0 0 1 1-1 6 6 0 0 1 6 6 1 1 0 1 1-2 0 4 4 0 0 0-4-4 1 1 0 0 1-1-1z"></path></svg> </a></div></footer>

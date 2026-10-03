@@ -1,0 +1,39 @@
+<!doctype html><html lang=ja><meta charset=utf-8><meta content="width=device-width,initial-scale=1.0" name=viewport><title>PostgreSQL 18 をソースコードからビルドしたい - レンコン畑でつかまえて</title><meta content="PostgreSQL 18 をソースコードからビルドする手順を確認します。" name=description><link href=/pagefind/pagefind-ui.css rel=stylesheet><link href=/styles.css rel=stylesheet><link href=/feed.xml rel=alternate title=レンコン畑でつかまえて type=application/atom+xml><link href=/feed.json rel=alternate title=レンコン畑でつかまえて type=application/json><script src="https://www.googletagmanager.com/gtag/js?id=G-1F9LYQGGMB" async></script><script>window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-1F9LYQGGMB');</script><script src=/pagefind/pagefind-ui.js></script><script>window.addEventListener('DOMContentLoaded',()=>{new PagefindUI({"element":"#search","showImages":false,"excerptLength":0,"showEmptyFilters":true,"showSubResults":false,"resetStyles":false,"bundlePath":"/pagefind/","baseUrl":"/"});});</script><body><nav class=navbar><a class=navbar-home href=/> <strong>レンコン畑でつかまえて</strong> </a><ul class=navbar-links><li><a href=/> Home </a><li><a href=/posts/> Archive </a><li><a href=https://about.jyuch.dev/> About Me </a></ul><div class=navbar-search><div id=search></div></div></nav><main class=body-post><article class=post data-pagefind-body><div class=post-header><h1 class=post-title>PostgreSQL 18 をソースコードからビルドしたい</h1><nav class=post-tags><a class=tag href=/tags/postgres/>postgres</a></nav><time datetime="2025-10-11 00:00:00" class=post-date> October 11th, 2025 </time></div><div class=post-body><h2>はじめに</h2><p>PostgreSQL 18 がリリースされたので、ソースコードからビルドする手順を確認してみました。<p>まぁ、基本的には公式リファレンスと過去の自分のブログをなぞっているだけです。<p>LLVMのサポートと、lz4・zstd圧縮のサポートを有効にしてビルドします。<p><a href=https://www.postgresql.org/docs/18/installation.html>Chapter 17. Installation from Source Code</a><p><a href=https://www.jyuch.dev/posts/2021/build-pg-on-linux/>PostgreSQLを野良ビルドしてローカルインストールしたい</a><h2>環境</h2><table><thead><tr><th style=text-align:left>ソフトウェア<th style=text-align:left>バージョン<tbody><tr><td style=text-align:left>OS<td style=text-align:left>Ubuntu 24.04.3 LTS<tr><td style=text-align:left>PostgreSQL<td style=text-align:left>18.0</table><p>また、ソースコードは<code>$HOME/src</code>に展開するものとし、バイナリは<code>$HOME/.local/pg18.0</code>にインストールするものとします。<h2>コンパイラ・ライブラリのインストール</h2><p>ビルドするだけなら以下のパッケージを入れるだけでOKです。<pre><code class="language-sh hljs language-bash"><span class=hljs-built_in>sudo</span> apt install \
+  build-essential \
+  flex \
+  bison \
+  libreadline-dev \
+  zlib1g-dev \
+  liblz4-dev \
+  libzstd-dev \
+  llvm-20 \
+  clang-20
+</code></pre><p>ドキュメントを含めたフルビルドが必要なら以下のパッケージも必要になります。<pre><code class="language-sh hljs language-bash"><span class=hljs-built_in>sudo</span> apt install \
+  docbook-xml \
+  docbook-xsl \
+  libxml2-utils \
+  xsltproc \
+  fop
+</code></pre><h2>ソースコードのダウンロード・展開</h2><p>以下のコマンドよりソースコードをダウロード・展開します。<pre><code class="language-sh hljs language-bash"><span class=hljs-built_in>cd</span> <span class=hljs-variable>$HOME</span>/src
+curl -OL https://ftp.postgresql.org/pub/source/v18.0/postgresql-18.0.tar.gz
+tar zxvf postgresql-18.0.tar.gz
+</code></pre><h2>ビルド・インストール</h2><p>以下のコマンドより、<code>configure</code>を流します。<pre><code class="language-sh hljs language-bash"><span class=hljs-built_in>cd</span> postgresql-18.0
+<span class=hljs-built_in>mkdir</span> build_temp && <span class=hljs-built_in>cd</span> build_temp
+<span class=hljs-variable>$HOME</span>/src/postgresql-18.0/configure \
+  --prefix=<span class=hljs-variable>$HOME</span>/.local/pg18.0 \
+  --with-icu \
+  --with-lz4 \
+  --with-zstd \
+  --with-llvm \
+  LLVM_CONFIG=<span class=hljs-string>'/usr/bin/llvm-config-20'</span> \
+  CLANG=<span class=hljs-string>'/usr/bin/clang-20'</span> \
+  CC=<span class=hljs-string>'/usr/bin/clang-20'</span> \
+  CXX=<span class=hljs-string>'/usr/bin/clang-20'</span>
+</code></pre><p>バイナリ系をビルドするだけなら以下のコマンドを実行します。<pre><code class="language-sh hljs language-bash">make world-bin
+make install-world-bin
+</code></pre><p>ドキュメントを含めてすべてビルドするなら以下のコマンドを実行します。<pre><code class="language-sh hljs language-bash">make world
+make install-world
+</code></pre><p>おわり</div></article><hr><nav class=post-navigation><ul><li>← Previous: <a href=/posts/2025/09-27-do-gen-ais-dream-of-biz/ rel=prev>生成AIは業務の夢を見るか</a><li><strong>Next: <a href=/posts/2025/10-12-pg18-uuidv7-is-monotonically-increasing/ rel=next>PostgreSQL 18 の uuidv7 関数は単調性が保証されているから安心だねってお話</a> →</strong></ul></nav></main><footer><div><a href=/feed.xml> <svg viewbox="0 0 16 16" height=16 width=16 xmlns=http://www.w3.org/2000/svg><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"></path><path d="M5.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-3-8.5a1 1 0 0 1 1-1c5.523 0 10 4.477 10 10a1 1 0 1 1-2 0 8 8 0 0 0-8-8 1 1 0 0 1-1-1zm0 4a1 1 0 0 1 1-1 6 6 0 0 1 6 6 1 1 0 1 1-2 0 4 4 0 0 0-4-4 1 1 0 0 1-1-1z"></path></svg> </a></div></footer>
