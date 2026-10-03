@@ -332,6 +332,7 @@ Databricksはなぜかすごい勢いで機能の名前を変更します。
 - Declarative Automation Bundles（旧：Databricks Asset Bundles）
 - OpenSharing（旧：Delta Sharing）
 - Genie Agents（旧：Genie Spaces）
+- Unity Gateway（旧：Unity AI Gateway）← New!
 
 まぁ、ブランディングとか関連機能との整合性とかあるのでしょうがないのかもしれませんが、他の人と機能のことを話す際に「この人はどっちで覚えてるだろうか」みたいな余計な気を遣わないといけないので少し面倒です。
 
