@@ -5,7 +5,7 @@
 	--blue: #135;
 	--white: #fff;
 	--font-family: -apple-system, system-ui, sans-serif;
-	--noto-sans-font-family: var(--font-noto-sans-jp), -apple-system, system-ui;
+	--noto-sans-font-family: "Noto Sans JP Light", var(--font-noto-sans-jp), -apple-system, system-ui;
 }
 
 html,
