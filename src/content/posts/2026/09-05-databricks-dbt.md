@@ -274,7 +274,7 @@ There are 1 unused configuration paths:
 07:38:47  Done. PASS=3 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=3
 ```
 
-![作成されたテーブル](/img/2026/09-05-databricks-dbt/created-tables.png)
+![作成されたテーブル](./09-05-databricks-dbt/created-tables.png)
 
 ### リネージの確認
 
@@ -288,7 +288,7 @@ uv run dbt docs serve
 
 とすると、ローカルサーバーが起動してモデル間のリネージが見られるようになります。
 
-![生成されたリネージ図](/img/2026/09-05-databricks-dbt/dbt-dag.png)
+![生成されたリネージ図](./09-05-databricks-dbt/dbt-dag.png)
 
 ## おわりに
 

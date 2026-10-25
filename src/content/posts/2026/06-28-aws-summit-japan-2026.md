@@ -11,7 +11,7 @@ tags:
 
 今年もAWS Summit Japanに参加してきたので、そのお話です。
 
-![1日目終了時に落書きボード](/img/2026/06-28-aws-summit-japan-2026.md/board.png)
+![1日目終了時に落書きボード](./06-28-aws-summit-japan-2026/board.png)
 
 ## 全体的なお話
 

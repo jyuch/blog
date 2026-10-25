@@ -126,7 +126,7 @@ UCがデータの入れ物であるならば、ワークスペースはプログ
 
 また、ワークスペースのバケット以外にも別途バケットを作成してExternal locationとして登録すれば、UCオブジェクトを登録する専用のバケットとして使用することもできます。
 
-![ワークスペースに紐づくAWSリソース](/img/2026/05-05-how-to-deploy-databricks-on-aws/workspace-aws-resources.png)
+![ワークスペースに紐づくAWSリソース](./05-05-how-to-deploy-databricks-on-aws/workspace-aws-resources.png)
 
 ### VPC構成
 
@@ -135,17 +135,17 @@ EC2を動かすためのサブネットは最低限インターネットへの�
 
 あとは、オンプレミスのデータベースやほかのVPCへの接続性のためにDirect ConnectやVPC Peeringを必要に応じて設定します。
 
-![最低限の構成](/img/2026/05-05-how-to-deploy-databricks-on-aws/vpc-design-least.png)
+![最低限の構成](./05-05-how-to-deploy-databricks-on-aws/vpc-design-least.png)
 
 ただし、この構成はクラシックコンピュートとコントロールプレーンの通信はインターネットを経由します。
 業界のコンプライアンス要件などでインターネットを経由できない場合、AWSサービスエンドポイントとDatabricksバックエンドサービスへのPrivateLinkを追加で構成することでインターネットへの接続性なしでクラシックコンピュートを運用できます。
 
-![コントロールプレーンとの通信がインターネットを通らない構成](/img/2026/05-05-how-to-deploy-databricks-on-aws/vpc-design-full.png)
+![コントロールプレーンとの通信がインターネットを通らない構成](./05-05-how-to-deploy-databricks-on-aws/vpc-design-full.png)
 
 クラシックコンピュートがインターネットへの接続性を持たない構成にすることもできます。
 この場合、ノートブックでPythonライブラリをインターネット経由でインストールすることが出来なくなるので、別途プロキシリポジトリを建てるかwheelパッケージをあらかじめダウンロードしてS3などに配置する必要があります。
 
-![エアギャップ構成](/img/2026/05-05-how-to-deploy-databricks-on-aws/vpc-design-air-gap.png)
+![エアギャップ構成](./05-05-how-to-deploy-databricks-on-aws/vpc-design-air-gap.png)
 
 厳密なインターネット分離が求められる場合、クラシックコンピュート⇔コントロールプレーン間だけでなくユーザ⇔コントロールプレーン間でもインターネットを経由しないことが求められるかと思います。
 その場合、[フロントエンドへの接続もインターネットを経由しない構成](https://docs.databricks.com/aws/en/security/network/front-end/front-end-private-connect)にすることができます。
@@ -304,7 +304,7 @@ UCでは`catalog.schema.object`の3タプルでオブジェクトが識別され
 
 あとは、たまにやべー挙動をする利用者が出てくると思うので、その監査用に`system.audit`スキーマのテーブルを使ってアクティビティ監査を行う専用のワークスペースを置いておきます。
 
-![ワークスペース設計](/img/2026/05-05-how-to-deploy-databricks-on-aws/workspace-design.png)
+![ワークスペース設計](./05-05-how-to-deploy-databricks-on-aws/workspace-design.png)
 
 ### カタログ専用バケットのデプロイ
 

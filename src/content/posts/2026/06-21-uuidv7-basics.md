@@ -66,9 +66,9 @@ v7はバージョンとバリアントを除くと、以下のフィールドか
 |`rand_a`|12ビットのランダムフィールド|
 |`rand_b`|62ビットのランダムフィールド|
 
-<img src="/img/2026/06-21-uuidv7-basics/uuidv7_field_and_bit_layout.png">
+![](./06-21-uuidv7-basics/uuidv7_field_and_bit_layout.png)
 
-<img src="/img/2026/06-21-uuidv7-basics/uuidv7_layout.png" width="75%">
+![](./06-21-uuidv7-basics/uuidv7_layout.png)
 
 `unix_ts_ms`はミリ秒なので、同一ミリ秒内で複数回生成した場合は生成順のソート（単調性）を保証できなくなります。
 
@@ -89,7 +89,7 @@ RFCでは追加の単調性を保証する以下の3つを提案しています�
 
 また、桁数が不足するようであれば`rand_b`の左側ビットもカウンターとして拡張します。
 
-<img src="/img/2026/06-21-uuidv7-basics/fixed_bit-length_dedicated_counter.png" width="75%">
+![](./06-21-uuidv7-basics/fixed_bit-length_dedicated_counter.png)
 
 ### 単調増加するランダム値
 
@@ -97,7 +97,7 @@ RFCでは追加の単調性を保証する以下の3つを提案しています�
 
 この場合、初回にあまりにも大きい値を生成してしまうとすぐにレンジを使いつぶしてしまうので、`ramd_a`パートを`000`で生成しておくといった工夫も必要になります。
 
-<img src="/img/2026/06-21-uuidv7-basics/monotonic_random.png" width="75%">
+![](./06-21-uuidv7-basics/monotonic_random.png)
 
 ### 追加のクロック精度の導入
 

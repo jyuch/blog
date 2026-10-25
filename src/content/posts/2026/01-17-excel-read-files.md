@@ -40,7 +40,7 @@ OOXMLはXMLの名前がついている通り、主にzipで圧縮されたXMLフ
 
 たとえば、以下のようなExcelファイルをzip展開すると、以下のような構造となっています。
 
-![example.xlsxの見た目](/img/2026/01-17-excel-read-files/example.xlsx.png)
+![example.xlsxの見た目](./01-17-excel-read-files/example.xlsx.png)
 
 ```txt
 example.xlsx
@@ -156,7 +156,7 @@ SSTはその名の通り、複数の場所から参照されるテキスト情�
 
 以下のような単純なExcelファイルを用意します。
 
-![](/img/2026/01-17-excel-read-files/01_simple_files.xlsx.png)
+![](./01-17-excel-read-files/01_simple_files.xlsx.png)
 
 最低限のオプションだけ設定すると以下のように出力されます。
 
@@ -171,7 +171,7 @@ FROM
   )
 ```
 
-![](/img/2026/01-17-excel-read-files/output_01.png)
+![](./01-17-excel-read-files/output_01.png)
 
 スキーマを推論してくれるので、日付や数字もそれぞれの型として認識してくれています。
 
@@ -226,7 +226,7 @@ FROM
   )
 ```
 
-![](/img/2026/01-17-excel-read-files/output_02.png)
+![](./01-17-excel-read-files/output_02.png)
 
 ちなみに、`inferColumnTypes`はExcel読み込みでは考慮されないようです。
 
@@ -242,7 +242,7 @@ FROM
   )
 ```
 
-![](/img/2026/01-17-excel-read-files/output_03.png)
+![](./01-17-excel-read-files/output_03.png)
 
 スキーマヒントを与えて強制的に文字列とすると、to_stringをしたような形式になります。
 
@@ -260,7 +260,7 @@ FROM
   )
 ```
 
-![](/img/2026/01-17-excel-read-files/output_04.png)
+![](./01-17-excel-read-files/output_04.png)
 
 ### 日本語を含む例
 
@@ -268,7 +268,7 @@ FROM
 
 今回の検証で初めて知ったのですが、Excelは変換時の元テキストをフリガナとして格納してくれるっぽいです。
 
-![](/img/2026/01-17-excel-read-files/02_日本語を含むファイル.xlsx.png)
+![](./01-17-excel-read-files/02_日本語を含むファイル.xlsx.png)
 
 関係ないセルを読まないよう、`dataAddress`で読み込む場所を明示してあげます。
 
@@ -285,7 +285,7 @@ FROM
   )
 ```
 
-![](/img/2026/01-17-excel-read-files/output_05.png)
+![](./01-17-excel-read-files/output_05.png)
 
 **良くないですね。**
 フリガナも拾ってきてしまっています。
@@ -395,7 +395,7 @@ FROM
   )
 ```
 
-![](/img/2026/01-17-excel-read-files/output_06.png)
+![](./01-17-excel-read-files/output_06.png)
 
 ```xml
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -468,7 +468,7 @@ FROM
 
 ドキュメントページでは[評価された数式を取り込みます](https://docs.databricks.com/aws/ja/query/formats/excel)とありますが、どのような意味なのでしょうか。
 
-![](/img/2026/01-17-excel-read-files/04_formula.xlsx.png)
+![](./01-17-excel-read-files/04_formula.xlsx.png)
 
 ```sql
 SELECT
@@ -481,7 +481,7 @@ FROM
   )
 ```
 
-![](/img/2026/01-17-excel-read-files/output_07.png)
+![](./01-17-excel-read-files/output_07.png)
 
 エクセルで数式セルを作成すると、内部的には数式と共に計算済みの値が格納されています。
 ドキュメントの「評価された数式を取り込みます」とはおそらく内部的に保持されている計算済みの値を取り込むということを言っているのだと思われます。
@@ -534,7 +534,7 @@ if __name__ == "__main__":
 
 Excelで開くと未計算のセルは計算されて表示されますが、`read_files`関数では計算済みの値が無いため、正しく取得できていません。
 
-![](/img/2026/01-17-excel-read-files/05_formula_no_value.xlsx.png)
+![](./01-17-excel-read-files/05_formula_no_value.xlsx.png)
 
 ```sql
 SELECT
@@ -547,7 +547,7 @@ FROM
   )
 ```
 
-![](/img/2026/01-17-excel-read-files/output_08.png)
+![](./01-17-excel-read-files/output_08.png)
 
 ### 複数のファイル
 
@@ -600,7 +600,7 @@ FROM
   )
 ```
 
-![](/img/2026/01-17-excel-read-files/output_09.png)
+![](./01-17-excel-read-files/output_09.png)
 
 良さそうですね。
 
@@ -696,6 +696,6 @@ GAが待ち遠しい機能ですね。
 
 こちらも解決済みです。やったぜ
 
-![](/img/2026/01-17-excel-read-files/gui_ingestion.png)
+![](./01-17-excel-read-files/gui_ingestion.png)
 
 おわり
