@@ -1,0 +1,66 @@
+---
+import { SITE_TITLE } from '../consts';
+
+const links = [
+	{ href: '/', label: 'Home' },
+	{ href: '/posts/', label: 'Archive' },
+];
+---
+
+<nav class="navbar">
+	<a href="/" class="navbar-home">
+		<strong>{SITE_TITLE}</strong>
+	</a>
+
+	<ul class="navbar-links">
+		{
+			links.map(({ href, label }) => (
+				<li>
+					<a href={href} aria-current={Astro.url.pathname === href ? 'page' : undefined}>
+						{label}
+					</a>
+				</li>
+			))
+		}
+		<li>
+			<a href="https://about.jyuch.dev/">About Me</a>
+		</li>
+	</ul>
+</nav>
+
+<style>
+	.navbar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		padding: 1rem 1rem 1rem 2rem;
+		column-gap: 2rem;
+		row-gap: 1rem;
+
+		& a {
+			display: block;
+
+			&:not(:hover) {
+				text-decoration: none;
+			}
+		}
+	}
+
+	.navbar-home {
+		font-family: var(--noto-sans-font-family);
+	}
+
+	.navbar-links {
+		padding: 0;
+		margin: 0;
+		list-style: none;
+		display: flex;
+		flex-wrap: wrap;
+		column-gap: 2rem;
+
+		& [aria-current='page'] {
+			font-weight: bold;
+			text-decoration: underline;
+		}
+	}
+</style>

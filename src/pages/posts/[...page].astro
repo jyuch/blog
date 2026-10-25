@@ -1,0 +1,42 @@
+---
+import type { GetStaticPaths } from 'astro';
+import PostList from '../../components/PostList.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getSortedPosts } from '../../utils/posts';
+
+export const getStaticPaths = (async ({ paginate }) => {
+	const posts = await getSortedPosts();
+	return paginate(posts, { pageSize: 10 });
+}) satisfies GetStaticPaths;
+
+const { page } = Astro.props;
+---
+
+<BaseLayout title="Archive">
+	<div class="home">
+		<h1>Archive</h1>
+		<PostList posts={page.data} />
+	</div>
+
+	<hr />
+
+	<nav class="post-navigation">
+		<ul>
+			{
+				page.url.prev && (
+					<li>
+						<a href={page.url.prev} rel="prev">← Previous</a>
+					</li>
+				)
+			}
+			<li>Page {page.currentPage}</li>
+			{
+				page.url.next && (
+					<li>
+						<a href={page.url.next} rel="next">Next →</a>
+					</li>
+				)
+			}
+		</ul>
+	</nav>
+</BaseLayout>

@@ -1,6 +1,0 @@
-{
-  "imports": {
-    "lume/": "https://cdn.jsdelivr.net/gh/lumeland/lume@3.3.2/",
-    "lume/jsx-runtime": "https://cdn.jsdelivr.net/gh/oscarotero/ssx@0.1.15/jsx-runtime.ts"
-  }
-}

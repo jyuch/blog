@@ -1,13 +1,11 @@
-FROM buildpack-deps:bullseye AS deno
+FROM node:24 AS build
 
-RUN curl -fsSL https://deno.land/x/install/install.sh | sh
-ENV DENO_INSTALL="/root/.deno"
-ENV PATH="$DENO_INSTALL/bin:$PATH"
-
-COPY . /src
 WORKDIR /src
-RUN deno task lume
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
 
-FROM nginx:1.23.2
+FROM nginx:1.29
 
-COPY --from=deno /src/_site/ /usr/share/nginx/html
+COPY --from=build /src/dist/ /usr/share/nginx/html

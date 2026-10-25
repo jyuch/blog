@@ -1,0 +1,45 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import FormattedDate from './FormattedDate.astro';
+import Tag from './Tag.astro';
+
+interface Props {
+	posts: CollectionEntry<'posts'>[];
+}
+
+const { posts } = Astro.props;
+---
+
+<ul class="postList">
+	{
+		posts.map((post) => (
+			<li>
+				<a href={`/posts/${post.id}/`} class="postList-title">
+					<strong>{post.data.title}</strong>
+				</a>{' '}
+				<span class="postList-date">
+					<FormattedDate date={post.data.date} />
+				</span>{' '}
+				{post.data.tags.map((tag) => <Tag tag={tag} />)}
+			</li>
+		))
+	}
+</ul>
+
+<style>
+	.postList {
+		list-style: none;
+		padding: 0;
+	}
+
+	.postList-date {
+		font-size: 0.8rem;
+		color: var(--darkgray);
+	}
+
+	.postList-title {
+		display: inline-block;
+		padding: 0.5em 0.2em;
+		font-size: 1.1rem;
+	}
+</style>

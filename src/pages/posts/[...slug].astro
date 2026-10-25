@@ -1,0 +1,21 @@
+---
+import { render } from 'astro:content';
+import BlogPost from '../../layouts/BlogPost.astro';
+import { getSortedPosts } from '../../utils/posts';
+
+export async function getStaticPaths() {
+	const posts = await getSortedPosts();
+	return posts.map((post, i) => ({
+		params: { slug: post.id },
+		// posts are sorted newest first
+		props: { post, prev: posts[i + 1], next: posts[i - 1] },
+	}));
+}
+
+const { post, prev, next } = Astro.props;
+const { Content } = await render(post);
+---
+
+<BlogPost post={post} prev={prev} next={next}>
+	<Content />
+</BlogPost>

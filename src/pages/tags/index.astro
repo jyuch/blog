@@ -1,0 +1,14 @@
+---
+import Tag from '../../components/Tag.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getSortedPosts } from '../../utils/posts';
+
+const tags = [...new Set((await getSortedPosts()).flatMap((post) => post.data.tags))].sort();
+---
+
+<BaseLayout title="Tags">
+	<div class="home">
+		<h1>Tags</h1>
+		{tags.map((tag) => <Tag tag={tag} big />)}
+	</div>
+</BaseLayout>

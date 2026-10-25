@@ -3,6 +3,12 @@ name: Publish on GitHub Pages
 on:
   push:
     branches: [ master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
 env:
   ENABLE_GOOGLE_ANALYTICS: true
@@ -13,20 +19,19 @@ jobs:
 
     steps:
       - name: Clone repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Setup Deno environment
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
+      - name: Install, build, and upload site
+        uses: withastro/action@v6
 
-      - name: Build site
-        run: |
-          deno task build --location=https://www.jyuch.dev/
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
-      - name: Deploy
-        uses: crazy-max/ghaction-github-pages@v4
-        with:
-          build_dir: _site
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

@@ -1,0 +1,39 @@
+---
+import { Font } from 'astro:assets';
+import { ENABLE_GOOGLE_ANALYTICS } from 'astro:env/server';
+import '../styles/global.css';
+import { GOOGLE_ANALYTICS_ID, SITE_DESCRIPTION, SITE_TITLE } from '../consts';
+
+interface Props {
+	title?: string;
+	description?: string;
+}
+
+const { title, description = SITE_DESCRIPTION } = Astro.props;
+---
+
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" href="/favicon.ico" />
+<link rel="sitemap" href="/sitemap-index.xml" />
+<link rel="alternate" type="application/rss+xml" title={SITE_TITLE} href={new URL('feed.xml', Astro.site)} />
+<Font cssVariable="--font-noto-sans-jp" />
+
+<title>{title ? `${title} - ${SITE_TITLE}` : SITE_TITLE}</title>
+<meta name="description" content={description} />
+
+{
+	ENABLE_GOOGLE_ANALYTICS && (
+		<>
+			<script is:inline async src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ANALYTICS_ID}`} />
+			<script is:inline define:vars={{ GOOGLE_ANALYTICS_ID }}>
+				window.dataLayer = window.dataLayer || [];
+				function gtag() {
+					dataLayer.push(arguments);
+				}
+				gtag('js', new Date());
+				gtag('config', GOOGLE_ANALYTICS_ID);
+			</script>
+		</>
+	)
+}

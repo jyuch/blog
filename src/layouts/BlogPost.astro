@@ -1,0 +1,130 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import FormattedDate from '../components/FormattedDate.astro';
+import Tag from '../components/Tag.astro';
+import BaseLayout from './BaseLayout.astro';
+
+type Post = CollectionEntry<'posts'>;
+
+interface Props {
+	post: Post;
+	prev?: Post;
+	next?: Post;
+}
+
+const { post, prev, next } = Astro.props;
+const { title, description, date, tags } = post.data;
+---
+
+<BaseLayout title={title} description={description}>
+	<article class="post">
+		<div class="post-header">
+			<h1 class="post-title">{title}</h1>
+
+			<nav class="post-tags">
+				{tags.map((tag) => <Tag tag={tag} />)}
+			</nav>
+
+			<FormattedDate date={date} />
+		</div>
+
+		<div class="post-body">
+			<slot />
+		</div>
+	</article>
+
+	<hr />
+
+	<nav class="post-navigation">
+		<ul>
+			{
+				prev && (
+					<li>
+						← Previous: <a href={`/posts/${prev.id}/`} rel="prev">{prev.data.title}</a>
+					</li>
+				)
+			}
+			{
+				next && (
+					<li>
+						<strong>
+							Next: <a href={`/posts/${next.id}/`} rel="next">{next.data.title}</a> →
+						</strong>
+					</li>
+				)
+			}
+		</ul>
+	</nav>
+</BaseLayout>
+
+<style>
+	.post {
+		margin: 0 auto;
+		max-width: 50em;
+	}
+
+	.post-title {
+		font-size: clamp(1.5rem, 10vw, 2rem);
+		line-height: 1.2;
+		letter-spacing: -0.02em;
+	}
+
+	.post-tags {
+		display: inline;
+	}
+
+	/* Markdown content is rendered outside of this component's scope, so use :global() */
+	.post-body {
+		font-size: 1.05em;
+		line-height: 1.6;
+
+		& :global(:not(pre) > code) {
+			padding: 0 0.25em;
+			border: solid 1px #e4e4e4;
+			border-radius: 3px;
+			background: #fafafa;
+		}
+
+		& :global(pre) {
+			padding: 0.5em 1em;
+			border: solid 1px #e4e4e4;
+			border-radius: 3px;
+		}
+
+		& :global(:is(h2, h3, h4, h5, h6)) {
+			margin-bottom: 0;
+		}
+
+		& :global(table) {
+			border-collapse: collapse;
+		}
+
+		& :global(th) {
+			background: #fafafa;
+			font-weight: normal;
+		}
+
+		& :global(:is(th, td)) {
+			border: solid 1px #e4e4e4;
+			border-spacing: 0;
+			padding: 0.25em 0.5em;
+		}
+
+		& :global(img) {
+			max-width: 100%;
+			display: block;
+			margin: 0 auto;
+		}
+
+		& :global(blockquote) {
+			margin-inline: 0.5em;
+			padding: 0.1em 1em;
+			border-left: 4px solid #f2f2f2;
+			color: #333333;
+		}
+
+		& :global(blockquote > p) {
+			margin: 0.5em 0;
+		}
+	}
+</style>

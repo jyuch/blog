@@ -1,0 +1,20 @@
+---
+import PostList from '../components/PostList.astro';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { getSortedPosts } from '../utils/posts';
+
+const posts = (await getSortedPosts()).slice(0, 5);
+---
+
+<BaseLayout>
+	<div class="home">
+		<h1>Latest {posts.length} Posts</h1>
+		<PostList posts={posts} />
+	</div>
+
+	<hr />
+
+	<div class="home">
+		<p>More posts can be found in <a href="/posts/">the archive</a>.</p>
+	</div>
+</BaseLayout>
