@@ -1,6 +1,6 @@
 ---
-title: Hugging FaceのSentence TransformersモデルをUnity Catalogに登録してServing endpointsにデプロイしたい
-description: Hugging FaceのモデルをUnity Catalogに登録してServing endpointsに登録する方法を確認します。
+title: HFの埋め込みモデルをUCに登録してServing endpointsにデプロイしたい
+description: HFのモデルをUCに登録してServing endpointsに展開する方法を確認します。
 date: 2026-02-25
 lastModified: 2026-02-25
 tags: 
