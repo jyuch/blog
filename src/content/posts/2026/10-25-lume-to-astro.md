@@ -4,8 +4,9 @@ description: DenoのEoLに備えてブログをLumeからAstroに移行しまし
 date: 2026-10-25
 lastModified: 2026-10-25
 tags:
-    - nodejs
-    - astro
+  - poem
+  - nodejs
+  - astro
 ---
 
 ## はじめに

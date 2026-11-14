@@ -3,7 +3,8 @@ title: UUIDv7の基礎
 description: UUIDv7の基礎について解説します。
 date: 2026-06-21
 lastModified: 2026-06-21
-tags: 
+tags:
+  - tech
 ---
 
 ## はじめに

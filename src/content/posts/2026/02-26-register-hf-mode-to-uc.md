@@ -3,7 +3,8 @@ title: HFの埋め込みモデルをUCに登録してServing endpointsにデプ�
 description: HFのモデルをUCに登録してServing endpointsに展開する方法を確認します。
 date: 2026-02-25
 lastModified: 2026-02-25
-tags: 
+tags:
+  - tech
   - databricks
 ---
 

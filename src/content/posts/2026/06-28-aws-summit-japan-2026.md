@@ -4,6 +4,7 @@ description: AWS Summit Japan 2026 の参加記録です。
 date: 2026-06-28
 lastModified: 2026-08-04
 tags:
+  - tech
   - aws
 ---
 

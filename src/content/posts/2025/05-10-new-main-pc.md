@@ -3,7 +3,7 @@ title: メインPCを更新したお話
 description: 更新したメインPCを紹介します。
 date: 2025-05-15
 lastModified: 2025-06-14
-tags: 
+tags:
   - poem
 ---
 

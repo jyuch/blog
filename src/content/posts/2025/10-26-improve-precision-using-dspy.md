@@ -3,7 +3,8 @@ title: DSPyを使用してLLMを使ったレシートの読み取り精度を向
 description: 安価なマルチモーダルLLMを使用したレシートの読み取り精度をDSPyを使用して改善するお話です。
 date: 2025-10-26
 lastModified: 2025-10-26
-tags: 
+tags:
+  - tech
   - python
   - gen-ai
   - databricks

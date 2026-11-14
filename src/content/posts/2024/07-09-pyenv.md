@@ -3,7 +3,7 @@ title: Windowsでもpyenvを使いたい
 description: pyenv-winの紹介です
 date: 2024-07-09
 lastModified: 2024-07-09
-tags: 
+tags:
   - python
 ---
 

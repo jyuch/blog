@@ -3,7 +3,7 @@ title: RustでもDNSベースのアドブロッカーを実装したい
 description: Rustで実装したアドブロッカーの紹介です
 date: 2024-06-03
 lastModified: 2024-06-03
-tags: 
+tags:
   - rust
   - dns
 ---

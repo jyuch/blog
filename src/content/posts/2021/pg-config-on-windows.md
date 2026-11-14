@@ -3,7 +3,7 @@ title: WindowsでもPostgreSQLのチューニングをしたい
 description: WindowsにおけるPostgreSQLのチューニングパラメータの解説をしています
 date: 2021-11-08
 lastModified: 2022-11-23
-tags: 
+tags:
   - postgres
 ---
 

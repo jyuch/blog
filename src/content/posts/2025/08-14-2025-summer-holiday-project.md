@@ -4,7 +4,8 @@ description: 生成AIでプライベートプロジェクトのリプレース�
 date: 2025-08-14
 lastModified: 2025-08-14
 draft: true
-tags: 
+tags:
+  - tech
   - gen-ai
   - rust
 ---

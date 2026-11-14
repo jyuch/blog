@@ -3,7 +3,7 @@ title: Rustでも画像がカラーかモノクロか判別したい
 description: Rustとimage-rsを使用して画像がカラー画像かモノクロ画像か判別する方法を紹介します。
 date: 2025-01-19
 lastModified: 2025-01-19
-tags: 
+tags:
   - rust
 ---
 

@@ -3,7 +3,8 @@ title: 生成AIは業務の夢を見るか
 description: MCPを介して生成AIに業務アプリを操作させるテストを行います。その後、実業務に適用する際に障壁となりうる箇所を考察します。
 date: 2025-09-27
 lastModified: 2025-09-27
-tags: 
+tags:
+  - tech
   - gen-ai
   - python
   - mcp

@@ -4,8 +4,9 @@ description: Databricksをターゲットとしてdbtを動かしてみます。
 date: 2026-09-05
 lastModified: 2026-09-05
 tags:
-    - databricks
-    - dbt
+  - tech
+  - databricks
+  - dbt
 ---
 
 ## はじめに

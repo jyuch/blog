@@ -4,8 +4,9 @@ description: JAWS-UG 茨城で S3 Tables について発表してきました。
 date: 2026-10-24
 lastModified: 2026-10-24
 tags:
-    - aws
-    - jawsug
+  - tech
+  - aws
+  - jawsug
 ---
 
 ## はじめに

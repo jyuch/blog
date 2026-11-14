@@ -4,8 +4,9 @@ description: Databricks SDKで統合認証を使う方法を確認します。
 date: 2026-08-14
 lastModified: 2026-08-14
 tags:
-    - databricks
-    - python
+  - tech
+  - databricks
+  - python
 ---
 
 ## はじめに

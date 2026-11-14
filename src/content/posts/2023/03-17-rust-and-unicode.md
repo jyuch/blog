@@ -3,7 +3,7 @@ title: Rustでも文字数をカウントしたい
 description: Rustで異体字セレクタを含む文字列の文字数カウントを行う方法を解説します
 date: 2023-03-17
 lastModified: 2023-03-17
-tags: 
+tags:
   - rust
   - character encoding
 ---

@@ -3,7 +3,7 @@ title: RustでもHickory DNSを使ってDNS Forwarderを実装したい
 description: RustからHickory DNSを使用してDNS Forwarderを実装する方法を確認します
 date: 2024-04-01
 lastModified: 2024-06-03
-tags: 
+tags:
   - rust
   - dns
 ---

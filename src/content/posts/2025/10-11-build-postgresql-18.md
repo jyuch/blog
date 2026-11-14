@@ -3,7 +3,8 @@ title: PostgreSQL 18 をソースコードからビルドしたい
 description: PostgreSQL 18 をソースコードからビルドする手順を確認します。
 date: 2025-10-11
 lastModified: 2025-10-11
-tags: 
+tags:
+  - tech
   - postgres
 ---
 

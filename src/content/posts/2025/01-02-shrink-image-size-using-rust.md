@@ -3,7 +3,7 @@ title: RustでもAVIFフォーマットに変換して画像サイズを縮小�
 description: Rustとimage-rsを使用して画像をavifフォーマットに変換する方法を紹介します。
 date: 2025-01-02
 lastModified: 2025-01-02
-tags: 
+tags:
   - rust
 ---
 

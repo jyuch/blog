@@ -3,7 +3,8 @@ title: ダウナー系生成AIに毎日カスの嘘を流し込まれたい
 description: DSPyのGEPAを使って「カスの嘘」を生成するようにプロンプト自動最適化を行います。
 date: 2025-12-28
 lastModified: 2025-01-12
-tags: 
+tags:
+  - tech
   - python
   - gen-ai
   - dspy

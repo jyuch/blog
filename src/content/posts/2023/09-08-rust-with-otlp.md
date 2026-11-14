@@ -3,7 +3,7 @@ title: RustでもOTLPでJaegerにテレメトリを送りたい
 description: RustからOpenTelemetryプロトコルを使用してJaegerにテレメトリを送る方法を確認します
 date: 2023-09-18
 lastModified: 2024-12-29
-tags: 
+tags:
   - rust
   - otlp
 ---

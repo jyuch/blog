@@ -3,7 +3,8 @@ title: DatabricksのSpark Declarative Pipelinesを使って簡易的な家計簿
 description: Databricks Spark Declarative PipelinesとAI関数を使ってレシートのOCRと情報の抽出を行うパイプラインを実装します。
 date: 2026-04-29
 lastModified: 2026-04-29
-tags: 
+tags:
+  - tech
   - databricks
 ---
 

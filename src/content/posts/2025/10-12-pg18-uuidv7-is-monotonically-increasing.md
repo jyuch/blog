@@ -3,7 +3,8 @@ title: PostgreSQL 18 の uuidv7 関数は単調性が保証されているから
 description: PostgreSQL 18 の uuidv7 関数で生成されるUUIDv7は単調性が保証されていることと、保証するメカニズムについて解説します。
 date: 2025-10-12
 lastModified: 2026-02-14
-tags: 
+tags:
+  - tech
   - postgres
 ---
 

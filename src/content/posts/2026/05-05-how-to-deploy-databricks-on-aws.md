@@ -3,7 +3,8 @@ title: はじめてのDatabricks on AWS
 description: DatabricksをAWS上に展開する際のプラクティスを解説します。
 date: 2026-05-05
 lastModified: 2026-06-22
-tags: 
+tags:
+  - tech
   - databricks
   - aws
 ---
