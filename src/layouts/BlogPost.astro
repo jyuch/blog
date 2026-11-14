@@ -127,5 +127,15 @@ const { title, description, date, tags } = post.data;
 		& :global(blockquote > p) {
 			margin: 0.5em 0;
 		}
+
+		& :global(section[data-footnotes]) {
+			font-size: 75%;
+			color: #6a737d;
+		}
+
+		/* 注釈の見出しを消す */
+		& :global(section[data-footnotes] > #footnote-label) {
+			display: none;
+		}
 	}
 </style>
