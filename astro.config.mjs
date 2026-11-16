@@ -6,7 +6,15 @@ import { defineConfig, envField, fontProviders } from 'astro/config';
 // https://astro.build/config
 export default defineConfig({
 	site: 'https://www.jyuch.dev',
-	integrations: [sitemap()],
+	integrations: [
+		sitemap({
+			filter: (page) => {
+				const { pathname } = new URL(page);
+				// Exclude tag pages and paginated post listings (/posts/, /posts/2/, ...)
+				return !pathname.startsWith('/tags/') && !/^\/posts\/(\d+\/)?$/.test(pathname);
+			},
+		}),
+	],
 	markdown: {
 		shikiConfig: {
 			theme: 'github-light',
