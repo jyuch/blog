@@ -2,7 +2,7 @@
 title: NW-JAWS DAY 2026に参加してきたお話
 description: NW-JAWS DAY 2026に参加してAWS Direct Connect Resiliency Workshopに参加しました。
 date: 2026-11-14
-lastModified: 2026-11-14
+lastModified: 2026-11-16
 tags:
   - tech
   - aws
@@ -14,7 +14,7 @@ tags:
 
 Direct Connectは「VPCはDirect Connect経由でオンプレミスと接続されています。」の一言で片づけられがちで、名前は聞いたことがあるけどよくわからない筆頭みたいな存在と個人的には思っています。
 
-そんな不思議なDXですが、ワークショップが開催されるということで参加してきました。
+そんな不思議なDirect Connectですが、ワークショップが開催されるということで参加してきました。
 
 ## ワークショップのストーリー
 
@@ -28,8 +28,8 @@ Direct Connectは「VPCはDirect Connect経由でオンプレミスと接続さ�
 
 二つのVPCがTransit Gatewayに接続されているので、
 
-1. Direct Connect Gatewayを作成する（AWSコンソール）
-2. Direct Connectパートナーに申請して、ホスト型接続を作成する（パートナー）
+1. Direct Connect Gatewayを作成してTransit Gatewayと関連付ける（AWSコンソール）
+2. Direct Connectパートナーに申請して、ホスト型接続を作成する
 3. 作成された接続をアタッチするVIFを作成する（AWSコンソール）
 
 の流れで作業を行います。
@@ -41,16 +41,18 @@ Direct Connectは「VPCはDirect Connect経由でオンプレミスと接続さ�
 
 ### BGPのパラメータを用いた経路の優先順位の制御
 
-Direct Connectでは以下の3つで経路の優先順位を制御できるようになっています。
+Direct Connectでは以下の4つで経路の優先順位を制御できるようになっています。
 
 1. BGPコミュニティ属性
 2. AS_PATHプリペンド
 3. ローカルプリファレンス
-4. （Multi-Exit Discriminator）
+4. Multi-Exit Discriminator
 
-特に優先順位を設定しない場合、今回の構成では経路が2つあるのでトラフィックが二つの経路を分散して流れます。[^2]
+ワークショップでは、BGPコミュニティ属性・AS_PATHプリペンド・ローカルプリファレンスを使用して優先度の設定を行っていきます。
 
-[^2]: 一般的なECMPと同じように往路と復路で経路が異なる場合が出てきます。
+ちなみに、特に優先順位を設定しない場合、今回の構成では経路が2つあるのでトラフィックが二つの経路を分散して流れます。
+この場合、一般的なECMPと同じように往路と復路で経路が異なる場合が出てきます。
+ステートフルなファイアーウォールを置いている場合だと、この挙動はあまりよろしくないかもしれません。
 
 #### BGPコミュニティ属性
 
@@ -74,7 +76,7 @@ BGPコミュニティ属性とAS_PATHプリペンドはAWS側から送る経路�
 
 このあたりも一般的なBGPと一緒です。
 
-#### （Multi-Exit Discriminator）
+#### Multi-Exit Discriminator
 
 ワークショップでは取り上げられませんでしたが、MEDを使用しても優先度を制御できるようです。
 ただし、[AWSのドキュメントでは推奨はしていない](https://docs.aws.amazon.com/directconnect/latest/UserGuide/routing-and-bgp.html#private-routing-policies)ようです。
@@ -82,10 +84,11 @@ BGPコミュニティ属性とAS_PATHプリペンドはAWS側から送る経路�
 ## おわりに
 
 Direct Connect GatewayやVIFの作成はAWS固有の作業ですが、その先の経路の制御はBGPを通じて行います。
-そのため、ワークショップの後半はVyOSのハンズオンなんじゃないかと錯覚するレベルでひたすらVyOSのコマンドを叩いていました。
+そのため、カスタマールーターとしてVyOSを使っているのもありワークショップの後半はVyOSのハンズオンなんじゃないかと錯覚するレベルでひたすらVyOSのコマンドを叩いていました。
 
 VyOSを少しでもかじったことのある人であれば、設定済みのコンフィグをのぞいてみるとより理解が深まりそうです。
 
 また、AWS側のローカルプリファレンスはAWSコンソールで操作できた方が良いのではと一瞬考えましたが、既存のネットワークの自動化に載せるなら自ルータから制御が出来た方が都合がいいのかもしれません。
+AS_PATHプリペンドはルータからやるのに、AWS側のローカルプリファレンスはAPIを叩いたりとかは違和感がありますしね。
 
 おわり
