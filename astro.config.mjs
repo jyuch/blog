@@ -10,8 +10,12 @@ export default defineConfig({
 		sitemap({
 			filter: (page) => {
 				const { pathname } = new URL(page);
-				// Exclude tag pages and paginated post listings (/posts/, /posts/2/, ...)
-				return !pathname.startsWith('/tags/') && !/^\/posts\/(\d+\/)?$/.test(pathname);
+				// Exclude tag pages, paginated post listings (/posts/, /posts/2/, ...) and 404 quiz explanations (/404/a/, ...)
+				return (
+					!pathname.startsWith('/tags/') &&
+					!/^\/posts\/(\d+\/)?$/.test(pathname) &&
+					!pathname.startsWith('/404/')
+				);
 			},
 		}),
 	],

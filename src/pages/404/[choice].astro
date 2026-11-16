@@ -1,0 +1,79 @@
+---
+import type { GetStaticPaths } from 'astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { CHOICES, CORRECT_CHOICE_ID, QUESTION, type Choice } from '../../utils/notFoundQuiz';
+
+export const getStaticPaths = (() => {
+	return CHOICES.map((choice) => ({
+		params: { choice: choice.id },
+		props: { choice },
+	}));
+}) satisfies GetStaticPaths;
+
+interface Props {
+	choice: Choice;
+}
+
+const { choice } = Astro.props;
+const correctChoice = CHOICES.find((c) => c.id === CORRECT_CHOICE_ID)!;
+const isCorrect = choice.id === CORRECT_CHOICE_ID;
+---
+
+<BaseLayout title="解答・解説">
+	<div class="home">
+		<h1>解答・解説</h1>
+
+		<p>{QUESTION}</p>
+
+		<p class="result">
+			あなたの解答：{choice.label}　<strong>{isCorrect ? '正解' : '不正解'}</strong>
+		</p>
+		<p>正解：{correctChoice.label}</p>
+
+		<h2>解説</h2>
+
+		{
+			CHOICES.map((c) => (
+				<section class:list={['explanation', { selected: c.id === choice.id }]}>
+					<h3>
+						{c.label}　{c.text}
+					</h3>
+					<p class="status">{c.status}</p>
+					{c.explanation.map((paragraph) => (
+						<p>{paragraph}</p>
+					))}
+				</section>
+			))
+		}
+
+		<p>
+			<a href="/">トップページへ</a>
+		</p>
+	</div>
+</BaseLayout>
+
+<style>
+	.result strong {
+		font-size: 1.2em;
+	}
+
+	.explanation {
+		margin: 1.5em 0;
+		padding-left: 1em;
+		border-left: solid 4px var(--lightgray);
+
+		&.selected {
+			border-left-color: var(--blue);
+		}
+
+		& h3 {
+			font-size: 1em;
+			margin-bottom: 0.5em;
+		}
+	}
+
+	.status {
+		font-weight: bold;
+		margin-top: 0;
+	}
+</style>

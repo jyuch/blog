@@ -1,10 +1,55 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import { CHOICES, QUESTION } from '../utils/notFoundQuiz';
 ---
 
 <BaseLayout title="Not Found">
 	<div class="home">
-		<h1>Content not found.</h1>
-		<p>Go <a href="/">home</a>.</p>
+		<div class="question">
+			<p>{QUESTION}</p>
+
+			<ol class="choices">
+				{
+					CHOICES.map((choice) => (
+						<li>
+							<a href={`/404/${choice.id}/`}>{choice.text}</a>
+						</li>
+					))
+				}
+			</ol>
+		</div>
 	</div>
 </BaseLayout>
+
+<style>
+	@counter-style choices-katakana {
+		system: fixed;
+		symbols: ア イ ウ エ オ カ キ ク ケ コ;
+		suffix: '　';
+	}
+
+	/* このページだけ、ヘッダーとフッターの間の領域いっぱいにmainを広げて上下中央に配置する */
+	:global(body) {
+		display: flex;
+		flex-direction: column;
+		min-height: 100vh;
+		min-height: 100dvh;
+	}
+
+	:global(main) {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+	}
+
+	.question {
+		width: fit-content;
+		max-width: 100%;
+		margin: 0 auto;
+	}
+
+	.choices {
+		list-style-type: choices-katakana;
+	}
+</style>
