@@ -5,48 +5,26 @@ import { CHOICES, QUESTION } from '../utils/notFoundQuiz';
 
 <BaseLayout title="Not Found">
 	<div class="home">
-		<div class="question">
-			<p>{QUESTION}</p>
+		<h1>Not Found</h1>
 
-			<ol class="choices">
-				{
-					CHOICES.map((choice) => (
-						<li>
-							<a href={`/404/${choice.id}/`}>{choice.text}</a>
-						</li>
-					))
-				}
-			</ol>
-		</div>
+		<p>{QUESTION}</p>
+		<ol class="choices">
+			{
+				CHOICES.map((choice) => (
+					<li>
+						<a href={`/404/${choice.id}/`}>{choice.text}</a>
+					</li>
+				))
+			}
+		</ol>
 	</div>
 </BaseLayout>
 
 <style>
 	@counter-style choices-katakana {
 		system: fixed;
-		symbols: ア イ ウ エ オ カ キ ク ケ コ;
+		symbols: ア イ ウ エ;
 		suffix: '　';
-	}
-
-	/* このページだけ、ヘッダーとフッターの間の領域いっぱいにmainを広げて上下中央に配置する */
-	:global(body) {
-		display: flex;
-		flex-direction: column;
-		min-height: 100vh;
-		min-height: 100dvh;
-	}
-
-	:global(main) {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		justify-content: center;
-	}
-
-	.question {
-		width: fit-content;
-		max-width: 100%;
-		margin: 0 auto;
 	}
 
 	.choices {
